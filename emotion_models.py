@@ -115,11 +115,15 @@ class VideoEmotionCNNLSTM:
         x = self._residual_block_3d(x, 24, dropout_rate=0.2)
         x = layers.MaxPooling3D((1, 2, 2))(x)
         
-        # Global pooling to reduce spatial dimensions
-        x = layers.GlobalAveragePooling3D()(x)
+        # Keep temporal dimension, pool spatial dimensions
+        x = layers.GlobalAveragePooling3D(data_format='channels_last')(x)
+        # x shape: (batch, 24)
+        
+        # Expand for LSTM (repeat features across temporal steps)
+        x = layers.RepeatVector(input_shape[0])(x)
+        # x shape: (batch, 16, 24)
         
         # LSTM on temporal features
-        x = layers.Reshape((input_shape[0], -1))(layers.Reshape((input_shape[0], 24))(x))
         x = layers.LSTM(32, return_sequences=True, dropout=0.3)(x)
         x = layers.LSTM(24, dropout=0.3)(x)
         
