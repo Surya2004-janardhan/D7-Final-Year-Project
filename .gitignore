@@ -3,6 +3,8 @@ __pycache__/
 *.py[codz]
 *$py.class
 
+Emotion-Recognition_SER-FER_RAVDESS/
+
 # C extensions
 *.so
 data/

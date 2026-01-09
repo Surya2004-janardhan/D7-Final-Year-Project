@@ -75,25 +75,28 @@ class VideoEmotionCNNLSTM:
     
     def build_model(self, input_shape):
         """
-        2D CNN (TimeDistributed) + LSTM architecture
-        Input shape: (num_frames=16, height=160, width=160, 3)
-        Applies 2D CNN to each frame, then LSTM on temporal sequence
+        2D CNN (TimeDistributed) + LSTM with 128x128 frames
+        Input shape: (num_frames=4, height=128, width=128, 3)
+        Ultra-optimized for memory constraints - 4 frames per video = ~65MB per 100 videos
+        Very fast loading, minimal GPU memory usage on RTX 2050
         """
         inputs = layers.Input(shape=input_shape)
         
-        # TimeDistributed 2D CNN on each frame
+        # TimeDistributed 2D CNN on each face
         x = layers.TimeDistributed(layers.Conv2D(32, (3, 3), padding='same', activation='relu'))(inputs)
         x = layers.TimeDistributed(layers.MaxPooling2D((2, 2)))(x)
+        x = layers.TimeDistributed(layers.Dropout(0.2))(x)
         
         x = layers.TimeDistributed(layers.Conv2D(64, (3, 3), padding='same', activation='relu'))(x)
         x = layers.TimeDistributed(layers.MaxPooling2D((2, 2)))(x)
+        x = layers.TimeDistributed(layers.Dropout(0.2))(x)
         
         x = layers.TimeDistributed(layers.Conv2D(128, (3, 3), padding='same', activation='relu'))(x)
         x = layers.TimeDistributed(layers.GlobalAveragePooling2D())(x)
         
-        # x shape: (batch, 16, 128) - temporal sequence of CNN features
+        # x shape: (batch, 16, 128) - temporal sequence of face features
         
-        # LSTM on temporal features
+        # LSTM on temporal face features
         x = layers.LSTM(64, return_sequences=True, dropout=0.3)(x)
         x = layers.LSTM(32, dropout=0.3)(x)
         
@@ -104,8 +107,8 @@ class VideoEmotionCNNLSTM:
         
         model = models.Model(inputs=inputs, outputs=outputs)
         
-        # Optimizer
-        optimizer = keras.optimizers.Adam(learning_rate=0.001, clipnorm=1.0)
+        # Optimizer - optimized for face-based training
+        optimizer = keras.optimizers.Adam(learning_rate=0.0005, clipnorm=1.0)
         model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
         
         self.model = model
