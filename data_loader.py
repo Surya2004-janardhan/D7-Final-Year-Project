@@ -102,12 +102,12 @@ class RAVDESSDataLoader:
         
         return X, y
     
-    def load_video_dataset(self, modality='speech', n_frames=30):
+    def load_video_dataset(self, modality='speech', n_frames=15):
         """
         Load video dataset
         Args:
             modality: 'speech' or 'song'
-            n_frames: Number of frames to extract per video
+            n_frames: Number of frames to extract per video (default 15 for RTX 2050)
         Returns:
             X: list of video frames
             y: list of emotion labels

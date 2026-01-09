@@ -112,7 +112,7 @@ def train_video_model(modality='speech'):
     model.build_model(X_train.shape[1:])
     
     print("Training...")
-    history = model.train(X_train, y_train, X_val, y_val, epochs=30, batch_size=8)
+    history = model.train(X_train, y_train, X_val, y_val, epochs=30, batch_size=4)
     
     # Save model
     model_path = f'models/video_emotion_{modality}.h5'
@@ -153,6 +153,8 @@ def main():
     
     print("\n" + "="*60)
     print("EMOTION DETECTION MODEL TRAINING PIPELINE")
+    print("OPTIMIZED FOR: 16GB RAM + RTX 2050")
+    print("Video: batch_size=4, frames=15 for memory efficiency")
     print("="*60)
     
     # Train audio models

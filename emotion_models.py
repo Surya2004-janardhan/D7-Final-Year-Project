@@ -76,7 +76,8 @@ class VideoEmotionCNNLSTM:
     def build_model(self, input_shape):
         """
         Build 3D CNN-LSTM model for video frames
-        Input shape: (num_frames, height, width, 3)
+        Input shape: (num_frames=15, height=224, width=224, 3)
+        Optimized for RTX 2050 with reduced memory footprint
         """
         model = models.Sequential([
             # 3D CNN layers
