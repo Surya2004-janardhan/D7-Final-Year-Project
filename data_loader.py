@@ -39,12 +39,12 @@ class RAVDESSDataLoader:
             print(f"Error loading audio {audio_path}: {e}")
             return None
     
-    def extract_video_frames(self, video_path, n_frames=30):
+    def extract_video_frames(self, video_path, n_frames=15):
         """
         Extract frames from video
         Args:
             video_path: Path to video file
-            n_frames: Number of frames to extract
+            n_frames: Number of frames to extract (reduced to 15 for memory efficiency)
         Returns:
             numpy array of shape (n_frames, height, width, 3)
         """

@@ -73,8 +73,26 @@ def organize_audio_files():
     data_path = Path('C:\\Users\\chint\\Desktop\\4-2-project\\data')
     organized_path = data_path / 'organized'
     
-    # Look for audio files (mp3 or wav)
+    # Look for audio files (mp3 or wav) in all subdirectories
     for audio_file in data_path.rglob('*.wav'):
+        if 'organized' not in str(audio_file):
+            parts = audio_file.stem.split('-')
+            if len(parts) >= 8:
+                vocal_channel = parts[1]
+                emotion_code = parts[2]
+                
+                emotion = get_emotion_label(emotion_code)
+                modality_type = get_modality_label(vocal_channel)
+                
+                dest_dir = organized_path / 'audio' / modality_type / emotion
+                dest_dir.mkdir(parents=True, exist_ok=True)
+                
+                dest_file = dest_dir / audio_file.name
+                shutil.copy2(audio_file, dest_file)
+                print(f"Organized: {audio_file.name} -> audio/{modality_type}/{emotion}/")
+    
+    # Also look for mp3 files
+    for audio_file in data_path.rglob('*.mp3'):
         if 'organized' not in str(audio_file):
             parts = audio_file.stem.split('-')
             if len(parts) >= 8:
@@ -93,9 +111,55 @@ def organize_audio_files():
 
 if __name__ == '__main__':
     print("Starting RAVDESS data organization...")
-    organize_video_files()
-    organize_audio_files()
-    print("\n✓ Data organization complete!")
+    
+    data_path = Path('C:\\Users\\chint\\Desktop\\4-2-project\\data')
+    organized_path = data_path / 'organized'
+    
+    video_count = 0
+    audio_count = 0
+    
+    # Process all Actor directories
+    for actor_dir in sorted(data_path.glob('Actor_*')):
+        if actor_dir.is_dir():
+            print(f"Processing {actor_dir.name}...")
+            
+            # Process video files (.mp4)
+            for video_file in actor_dir.glob('*.mp4'):
+                parts = video_file.stem.split('-')
+                if len(parts) >= 3:
+                    vocal_channel = parts[1]  # 01=speech, 02=song
+                    emotion_code = parts[2]   # 01-08 = emotions
+                    
+                    emotion = get_emotion_label(emotion_code)
+                    modality_type = get_modality_label(vocal_channel)
+                    
+                    dest_dir = organized_path / 'video' / modality_type / emotion
+                    dest_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    dest_file = dest_dir / video_file.name
+                    shutil.copy2(video_file, dest_file)
+                    video_count += 1
+            
+            # Process audio files (.wav)
+            for audio_file in actor_dir.glob('*.wav'):
+                parts = audio_file.stem.split('-')
+                if len(parts) >= 3:
+                    vocal_channel = parts[1]  # 01=speech, 02=song
+                    emotion_code = parts[2]   # 01-08 = emotions
+                    
+                    emotion = get_emotion_label(emotion_code)
+                    modality_type = get_modality_label(vocal_channel)
+                    
+                    dest_dir = organized_path / 'audio' / modality_type / emotion
+                    dest_dir.mkdir(parents=True, exist_ok=True)
+                    
+                    dest_file = dest_dir / audio_file.name
+                    shutil.copy2(audio_file, dest_file)
+                    audio_count += 1
+    
+    print(f"\n✓ Data organization complete!")
+    print(f"Videos organized: {video_count}")
+    print(f"Audio files organized: {audio_count}")
     print("\nFinal structure:")
     print("organized/")
     print("├── audio/")
