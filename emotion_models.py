@@ -76,11 +76,11 @@ class VideoEmotionCNNLSTM:
     def build_model(self, input_shape):
         """
         Build 3D CNN-LSTM model for video frames
-        Input shape: (num_frames=15, height=224, width=224, 3)
-        Optimized for RTX 2050 with reduced memory footprint
+        Input shape: (num_frames=8, height=160, width=160, 3)
+        Ultra-optimized for RTX 2050 (minimal memory footprint)
         """
         model = models.Sequential([
-            # 3D CNN layers
+            # 3D CNN layers (reduced filters for memory)
             layers.Conv3D(32, (3, 3, 3), activation='relu', padding='same', input_shape=input_shape),
             layers.BatchNormalization(),
             layers.MaxPooling3D((1, 2, 2)),
@@ -92,9 +92,9 @@ class VideoEmotionCNNLSTM:
             # Reshape for LSTM
             layers.Reshape((input_shape[0], -1)),
             
-            # LSTM layers
-            layers.LSTM(128, return_sequences=True, dropout=0.5),
-            layers.LSTM(64, dropout=0.5),
+            # LSTM layers (reduced units)
+            layers.LSTM(64, return_sequences=True, dropout=0.5),
+            layers.LSTM(32, dropout=0.5),
             
             # Dense layers
             layers.Dense(128, activation='relu'),

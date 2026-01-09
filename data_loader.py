@@ -39,12 +39,12 @@ class RAVDESSDataLoader:
             print(f"Error loading audio {audio_path}: {e}")
             return None
     
-    def extract_video_frames(self, video_path, n_frames=15):
+    def extract_video_frames(self, video_path, n_frames=8):
         """
         Extract frames from video
         Args:
             video_path: Path to video file
-            n_frames: Number of frames to extract (reduced to 15 for memory efficiency)
+            n_frames: Number of frames to extract (8 frames for RTX 2050)
         Returns:
             numpy array of shape (n_frames, height, width, 3)
         """
@@ -63,8 +63,8 @@ class RAVDESSDataLoader:
                 cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
                 ret, frame = cap.read()
                 if ret:
-                    # Resize to 224x224 (standard for CNN)
-                    frame = cv2.resize(frame, (224, 224))
+                    # Resize to 160x160 (smaller for memory efficiency)
+                    frame = cv2.resize(frame, (160, 160))
                     frames.append(frame)
             
             cap.release()
@@ -102,12 +102,12 @@ class RAVDESSDataLoader:
         
         return X, y
     
-    def load_video_dataset(self, modality='speech', n_frames=15):
+    def load_video_dataset(self, modality='speech', n_frames=8):
         """
         Load video dataset
         Args:
             modality: 'speech' or 'song'
-            n_frames: Number of frames to extract per video (default 15 for RTX 2050)
+            n_frames: Number of frames to extract per video (8 for RTX 2050)
         Returns:
             X: list of video frames
             y: list of emotion labels

@@ -126,7 +126,7 @@ def train_video_model(modality='speech'):
     model.build_model(X_train.shape[1:])
     
     print("Training...")
-    history = model.train(X_train, y_train, X_val, y_val, epochs=30, batch_size=4)
+    history = model.train(X_train, y_train, X_val, y_val, epochs=20, batch_size=2)
     
     # Save model
     model_path = f'models/video_emotion_{modality}.h5'
