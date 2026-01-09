@@ -94,7 +94,7 @@ def train_video_model(modality='speech'):
     """Train video emotion detection model"""
     print(f"\n{'='*60}")
     print(f"Training Video Model - {modality.upper()}")
-    print(f"Optimized 3D CNN with Residual Blocks")
+    print(f"2D CNN with TimeDistributed + LSTM")
     print(f"{'='*60}\n")
     
     # Check if model already exists
@@ -168,9 +168,9 @@ def main():
     
     print("\n" + "="*60)
     print("EMOTION DETECTION MODEL TRAINING PIPELINE")
-    print("OPTIMIZED 3D CNN: Residual Blocks + LayerNorm")
+    print("2D CNN (TimeDistributed) + LSTM")
     print("Hardware: 16GB RAM + RTX 2050")
-    print("Frames: 16 @ 160×160 | Batch: 4 | LR Schedule: ReduceLROnPlateau")
+    print("Architecture: 2D CNN per frame → LSTM temporal modeling")
     print("="*60)
     
     # Train audio models

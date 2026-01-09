@@ -67,74 +67,44 @@ class AudioEmotionCNNLSTM:
 
 
 class VideoEmotionCNNLSTM:
-    """Optimized 3D CNN-LSTM with Residual Blocks for video emotion detection"""
+    """2D CNN with TimeDistributed + LSTM for video emotion detection"""
     
     def __init__(self, num_emotions=8):
         self.num_emotions = num_emotions
         self.model = None
     
-    def _residual_block_3d(self, x, filters, kernel_size=3, dropout_rate=0.3):
-        """3D Residual Block with Layer Normalization"""
-        shortcut = x
-        
-        # Conv block
-        x = layers.Conv3D(filters, kernel_size, padding='same', activation='relu')(x)
-        x = layers.LayerNormalization()(x)
-        x = layers.Dropout(dropout_rate)(x)
-        
-        x = layers.Conv3D(filters, kernel_size, padding='same')(x)
-        x = layers.LayerNormalization()(x)
-        
-        # Match dimensions if needed
-        if shortcut.shape[-1] != filters:
-            shortcut = layers.Conv3D(filters, 1, padding='same')(shortcut)
-        
-        # Add
-        x = layers.Add()([x, shortcut])
-        x = layers.Activation('relu')(x)
-        
-        return x
-    
     def build_model(self, input_shape):
         """
-        3D CNN with Residual Blocks + LSTM
+        2D CNN (TimeDistributed) + LSTM architecture
         Input shape: (num_frames=16, height=160, width=160, 3)
-        Optimized for RTX 2050 with residual connections
+        Applies 2D CNN to each frame, then LSTM on temporal sequence
         """
         inputs = layers.Input(shape=input_shape)
         
-        # Initial conv
-        x = layers.Conv3D(8, (3, 3, 3), padding='same', activation='relu')(inputs)
-        x = layers.LayerNormalization()(x)
+        # TimeDistributed 2D CNN on each frame
+        x = layers.TimeDistributed(layers.Conv2D(32, (3, 3), padding='same', activation='relu'))(inputs)
+        x = layers.TimeDistributed(layers.MaxPooling2D((2, 2)))(x)
         
-        # Residual Block 1
-        x = self._residual_block_3d(x, 16, dropout_rate=0.2)
-        x = layers.MaxPooling3D((1, 2, 2))(x)
+        x = layers.TimeDistributed(layers.Conv2D(64, (3, 3), padding='same', activation='relu'))(x)
+        x = layers.TimeDistributed(layers.MaxPooling2D((2, 2)))(x)
         
-        # Residual Block 2
-        x = self._residual_block_3d(x, 24, dropout_rate=0.2)
-        x = layers.MaxPooling3D((1, 2, 2))(x)
+        x = layers.TimeDistributed(layers.Conv2D(128, (3, 3), padding='same', activation='relu'))(x)
+        x = layers.TimeDistributed(layers.GlobalAveragePooling2D())(x)
         
-        # Keep temporal dimension, pool spatial dimensions
-        x = layers.GlobalAveragePooling3D(data_format='channels_last')(x)
-        # x shape: (batch, 24)
-        
-        # Expand for LSTM (repeat features across temporal steps)
-        x = layers.RepeatVector(input_shape[0])(x)
-        # x shape: (batch, 16, 24)
+        # x shape: (batch, 16, 128) - temporal sequence of CNN features
         
         # LSTM on temporal features
-        x = layers.LSTM(32, return_sequences=True, dropout=0.3)(x)
-        x = layers.LSTM(24, dropout=0.3)(x)
+        x = layers.LSTM(64, return_sequences=True, dropout=0.3)(x)
+        x = layers.LSTM(32, dropout=0.3)(x)
         
-        # Dense
-        x = layers.Dense(32, activation='relu')(x)
+        # Dense layers
+        x = layers.Dense(64, activation='relu')(x)
         x = layers.Dropout(0.3)(x)
         outputs = layers.Dense(self.num_emotions, activation='softmax')(x)
         
         model = models.Model(inputs=inputs, outputs=outputs)
         
-        # Optimizer with gradient clipping
+        # Optimizer
         optimizer = keras.optimizers.Adam(learning_rate=0.001, clipnorm=1.0)
         model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
         
@@ -142,7 +112,7 @@ class VideoEmotionCNNLSTM:
         return model
     
     def train(self, X_train, y_train, X_val, y_val, epochs=20, batch_size=4):
-        """Train with learning rate scheduling and early stopping"""
+        """Train with learning rate scheduling"""
         
         # Learning rate scheduler
         lr_schedule = keras.callbacks.ReduceLROnPlateau(
