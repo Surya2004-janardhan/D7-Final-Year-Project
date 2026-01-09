@@ -94,6 +94,7 @@ def train_video_model(modality='speech'):
     """Train video emotion detection model"""
     print(f"\n{'='*60}")
     print(f"Training Video Model - {modality.upper()}")
+    print(f"Optimized 3D CNN with Residual Blocks")
     print(f"{'='*60}\n")
     
     # Check if model already exists
@@ -107,7 +108,7 @@ def train_video_model(modality='speech'):
     
     # Load data
     print(f"Loading video data ({modality})...")
-    X, y = loader.load_video_dataset(modality, n_frames=15)
+    X, y = loader.load_video_dataset(modality, n_frames=16)
     
     if not X:
         print(f"No video data found for {modality}!")
@@ -126,7 +127,7 @@ def train_video_model(modality='speech'):
     model.build_model(X_train.shape[1:])
     
     print("Training...")
-    history = model.train(X_train, y_train, X_val, y_val, epochs=20, batch_size=2)
+    history = model.train(X_train, y_train, X_val, y_val, epochs=20, batch_size=4)
     
     # Save model
     model_path = f'models/video_emotion_{modality}.h5'
@@ -167,8 +168,9 @@ def main():
     
     print("\n" + "="*60)
     print("EMOTION DETECTION MODEL TRAINING PIPELINE")
-    print("OPTIMIZED FOR: 16GB RAM + RTX 2050")
-    print("Video: batch_size=4, frames=15 for memory efficiency")
+    print("OPTIMIZED 3D CNN: Residual Blocks + LayerNorm")
+    print("Hardware: 16GB RAM + RTX 2050")
+    print("Frames: 16 @ 160×160 | Batch: 4 | LR Schedule: ReduceLROnPlateau")
     print("="*60)
     
     # Train audio models

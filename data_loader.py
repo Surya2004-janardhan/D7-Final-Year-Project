@@ -39,12 +39,12 @@ class RAVDESSDataLoader:
             print(f"Error loading audio {audio_path}: {e}")
             return None
     
-    def extract_video_frames(self, video_path, n_frames=8):
+    def extract_video_frames(self, video_path, n_frames=16):
         """
         Extract frames from video
         Args:
             video_path: Path to video file
-            n_frames: Number of frames to extract (8 frames for RTX 2050)
+            n_frames: Number of frames to extract (16 for better temporal info)
         Returns:
             numpy array of shape (n_frames, height, width, 3)
         """
@@ -102,12 +102,12 @@ class RAVDESSDataLoader:
         
         return X, y
     
-    def load_video_dataset(self, modality='speech', n_frames=8):
+    def load_video_dataset(self, modality='speech', n_frames=16):
         """
         Load video dataset
         Args:
             modality: 'speech' or 'song'
-            n_frames: Number of frames to extract per video (8 for RTX 2050)
+            n_frames: Number of frames to extract per video (16 for better temporal modeling)
         Returns:
             X: list of video frames
             y: list of emotion labels

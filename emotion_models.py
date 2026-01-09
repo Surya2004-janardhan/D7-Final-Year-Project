@@ -67,53 +67,103 @@ class AudioEmotionCNNLSTM:
 
 
 class VideoEmotionCNNLSTM:
-    """CNN-LSTM model for video emotion detection"""
+    """Optimized 3D CNN-LSTM with Residual Blocks for video emotion detection"""
     
     def __init__(self, num_emotions=8):
         self.num_emotions = num_emotions
         self.model = None
     
+    def _residual_block_3d(self, x, filters, kernel_size=3, dropout_rate=0.3):
+        """3D Residual Block with Layer Normalization"""
+        shortcut = x
+        
+        # Conv block
+        x = layers.Conv3D(filters, kernel_size, padding='same', activation='relu')(x)
+        x = layers.LayerNormalization()(x)
+        x = layers.Dropout(dropout_rate)(x)
+        
+        x = layers.Conv3D(filters, kernel_size, padding='same')(x)
+        x = layers.LayerNormalization()(x)
+        
+        # Match dimensions if needed
+        if shortcut.shape[-1] != filters:
+            shortcut = layers.Conv3D(filters, 1, padding='same')(shortcut)
+        
+        # Add
+        x = layers.Add()([x, shortcut])
+        x = layers.Activation('relu')(x)
+        
+        return x
+    
     def build_model(self, input_shape):
         """
-        Build 3D CNN-LSTM model for video frames
-        Input shape: (num_frames=8, height=160, width=160, 3)
-        Ultra-optimized for RTX 2050 (minimal memory footprint)
+        3D CNN with Residual Blocks + LSTM
+        Input shape: (num_frames=16, height=160, width=160, 3)
+        Optimized for RTX 2050 with residual connections
         """
-        model = models.Sequential([
-            # 3D CNN layers (reduced filters for memory)
-            layers.Conv3D(32, (3, 3, 3), activation='relu', padding='same', input_shape=input_shape),
-            layers.BatchNormalization(),
-            layers.MaxPooling3D((1, 2, 2)),
-            
-            layers.Conv3D(64, (3, 3, 3), activation='relu', padding='same'),
-            layers.BatchNormalization(),
-            layers.MaxPooling3D((1, 2, 2)),
-            
-            # Reshape for LSTM
-            layers.Reshape((input_shape[0], -1)),
-            
-            # LSTM layers (reduced units)
-            layers.LSTM(64, return_sequences=True, dropout=0.5),
-            layers.LSTM(32, dropout=0.5),
-            
-            # Dense layers
-            layers.Dense(128, activation='relu'),
-            layers.Dropout(0.5),
-            layers.Dense(self.num_emotions, activation='softmax')
-        ])
+        inputs = layers.Input(shape=input_shape)
         
-        model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+        # Initial conv
+        x = layers.Conv3D(8, (3, 3, 3), padding='same', activation='relu')(inputs)
+        x = layers.LayerNormalization()(x)
+        
+        # Residual Block 1
+        x = self._residual_block_3d(x, 16, dropout_rate=0.2)
+        x = layers.MaxPooling3D((1, 2, 2))(x)
+        
+        # Residual Block 2
+        x = self._residual_block_3d(x, 24, dropout_rate=0.2)
+        x = layers.MaxPooling3D((1, 2, 2))(x)
+        
+        # Global pooling to reduce spatial dimensions
+        x = layers.GlobalAveragePooling3D()(x)
+        
+        # LSTM on temporal features
+        x = layers.Reshape((input_shape[0], -1))(layers.Reshape((input_shape[0], 24))(x))
+        x = layers.LSTM(32, return_sequences=True, dropout=0.3)(x)
+        x = layers.LSTM(24, dropout=0.3)(x)
+        
+        # Dense
+        x = layers.Dense(32, activation='relu')(x)
+        x = layers.Dropout(0.3)(x)
+        outputs = layers.Dense(self.num_emotions, activation='softmax')(x)
+        
+        model = models.Model(inputs=inputs, outputs=outputs)
+        
+        # Optimizer with gradient clipping
+        optimizer = keras.optimizers.Adam(learning_rate=0.001, clipnorm=1.0)
+        model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
+        
         self.model = model
         return model
     
-    def train(self, X_train, y_train, X_val, y_val, epochs=50, batch_size=8):
-        """Train the model"""
+    def train(self, X_train, y_train, X_val, y_val, epochs=20, batch_size=4):
+        """Train with learning rate scheduling and early stopping"""
+        
+        # Learning rate scheduler
+        lr_schedule = keras.callbacks.ReduceLROnPlateau(
+            monitor='val_loss',
+            factor=0.5,
+            patience=3,
+            min_lr=0.00001,
+            verbose=1
+        )
+        
+        # Early stopping
+        early_stop = keras.callbacks.EarlyStopping(
+            monitor='val_loss',
+            patience=5,
+            restore_best_weights=True,
+            verbose=1
+        )
+        
         history = self.model.fit(
             X_train, y_train,
             validation_data=(X_val, y_val),
             epochs=epochs,
             batch_size=batch_size,
-            verbose=1
+            verbose=1,
+            callbacks=[lr_schedule, early_stop]
         )
         return history
 
