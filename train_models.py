@@ -173,12 +173,14 @@ def main():
     
     # Train audio models
     print("\nStarting Audio Model Training...")
-    audio_speech_model, audio_speech_history = train_audio_model('speech')
-    if audio_speech_history:
+    audio_speech_result = train_audio_model('speech')
+    if audio_speech_result[0] is not None:
+        audio_speech_model, audio_speech_history = audio_speech_result
         plot_training_history(audio_speech_history, "Audio Speech Model")
     
-    audio_song_model, audio_song_history = train_audio_model('song')
-    if audio_song_history:
+    audio_song_result = train_audio_model('song')
+    if audio_song_result[0] is not None:
+        audio_song_model, audio_song_history = audio_song_result
         plot_training_history(audio_song_history, "Audio Song Model")
     
     # Train video models
@@ -188,8 +190,9 @@ def main():
     # Skip video speech (doesn't exist in RAVDESS)
     print("\nSkipping Video Speech (not available in dataset)")
     
-    video_song_model, video_song_history = train_video_model('song')
-    if video_song_history:
+    video_song_result = train_video_model('song')
+    if video_song_result[0] is not None:
+        video_song_model, video_song_history = video_song_result
         plot_training_history(video_song_history, "Video Song Model")
     
     print("\n" + "="*60)
