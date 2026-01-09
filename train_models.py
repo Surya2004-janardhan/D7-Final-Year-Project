@@ -46,6 +46,13 @@ def train_audio_model(modality='speech'):
     print(f"Training Audio Model - {modality.upper()}")
     print(f"{'='*60}\n")
     
+    # Check if model already exists
+    model_path = f'models/audio_emotion_{modality}.h5'
+    if os.path.exists(model_path):
+        print(f"✓ Model already exists: {model_path}")
+        print(f"Skipping training...\n")
+        return None, None
+    
     loader = RAVDESSDataLoader()
     
     # Load data
@@ -89,11 +96,18 @@ def train_video_model(modality='speech'):
     print(f"Training Video Model - {modality.upper()}")
     print(f"{'='*60}\n")
     
+    # Check if model already exists
+    model_path = f'models/video_emotion_{modality}.h5'
+    if os.path.exists(model_path):
+        print(f"✓ Model already exists: {model_path}")
+        print(f"Skipping training...\n")
+        return None, None
+    
     loader = RAVDESSDataLoader()
     
     # Load data
     print(f"Loading video data ({modality})...")
-    X, y = loader.load_video_dataset(modality, n_frames=30)
+    X, y = loader.load_video_dataset(modality, n_frames=15)
     
     if not X:
         print(f"No video data found for {modality}!")
@@ -169,9 +183,10 @@ def main():
     
     # Train video models
     print("\nStarting Video Model Training...")
-    video_speech_model, video_speech_history = train_video_model('speech')
-    if video_speech_history:
-        plot_training_history(video_speech_history, "Video Speech Model")
+    print("Note: RAVDESS only has video of singing, not speech")
+    
+    # Skip video speech (doesn't exist in RAVDESS)
+    print("\nSkipping Video Speech (not available in dataset)")
     
     video_song_model, video_song_history = train_video_model('song')
     if video_song_history:
