@@ -118,57 +118,31 @@ def load_ravdess_data(data_dir='data', n_frames=16):
 
 def build_improved_model(n_frames=16, input_shape=(48, 48, 1), num_emotions=7):
     """
-    Improved architecture with:
-    - Deeper CNN per frame
-    - Bidirectional LSTM for better temporal understanding
-    - Attention mechanism
-    - Better regularization
+    Simpler architecture to avoid memory issues
     """
     inputs = layers.Input(shape=(n_frames,) + input_shape)
     
-    # Per-frame CNN feature extraction
-    # Block 1
-    x = layers.TimeDistributed(layers.Conv2D(32, (3, 3), padding='same'))(inputs)
-    x = layers.TimeDistributed(layers.BatchNormalization())(x)
-    x = layers.TimeDistributed(layers.Activation('relu'))(x)
-    x = layers.TimeDistributed(layers.Conv2D(32, (3, 3), padding='same'))(x)
-    x = layers.TimeDistributed(layers.BatchNormalization())(x)
-    x = layers.TimeDistributed(layers.Activation('relu'))(x)
+    # Simple CNN per frame
+    x = layers.TimeDistributed(layers.Conv2D(32, (3, 3), padding='same', activation='relu'))(inputs)
     x = layers.TimeDistributed(layers.MaxPooling2D((2, 2)))(x)
     x = layers.TimeDistributed(layers.Dropout(0.25))(x)
     
-    # Block 2
-    x = layers.TimeDistributed(layers.Conv2D(64, (3, 3), padding='same'))(x)
-    x = layers.TimeDistributed(layers.BatchNormalization())(x)
-    x = layers.TimeDistributed(layers.Activation('relu'))(x)
-    x = layers.TimeDistributed(layers.Conv2D(64, (3, 3), padding='same'))(x)
-    x = layers.TimeDistributed(layers.BatchNormalization())(x)
-    x = layers.TimeDistributed(layers.Activation('relu'))(x)
+    x = layers.TimeDistributed(layers.Conv2D(64, (3, 3), padding='same', activation='relu'))(x)
     x = layers.TimeDistributed(layers.MaxPooling2D((2, 2)))(x)
     x = layers.TimeDistributed(layers.Dropout(0.25))(x)
     
-    # Block 3
-    x = layers.TimeDistributed(layers.Conv2D(128, (3, 3), padding='same'))(x)
-    x = layers.TimeDistributed(layers.BatchNormalization())(x)
-    x = layers.TimeDistributed(layers.Activation('relu'))(x)
-    x = layers.TimeDistributed(layers.MaxPooling2D((2, 2)))(x)
-    x = layers.TimeDistributed(layers.Dropout(0.25))(x)
-    
-    # Global pooling per frame
+    x = layers.TimeDistributed(layers.Conv2D(64, (3, 3), padding='same', activation='relu'))(x)
     x = layers.TimeDistributed(layers.GlobalAveragePooling2D())(x)
-    # Shape: (batch, n_frames, 128)
+    # Shape: (batch, n_frames, 64)
     
-    # Bidirectional LSTM for temporal modeling
-    x = layers.Bidirectional(layers.LSTM(64, return_sequences=True, dropout=0.3, recurrent_dropout=0.2))(x)
-    x = layers.Bidirectional(layers.LSTM(32, dropout=0.3, recurrent_dropout=0.2))(x)
-    # Shape: (batch, 64)
+    # Simple LSTM
+    x = layers.LSTM(64, return_sequences=True, dropout=0.3)(x)
+    x = layers.LSTM(32, dropout=0.3)(x)
     
     # Classification head
-    x = layers.Dense(64, activation='relu', kernel_regularizer=keras.regularizers.l2(0.01))(x)
-    x = layers.BatchNormalization()(x)
+    x = layers.Dense(64, activation='relu')(x)
     x = layers.Dropout(0.5)(x)
-    
-    x = layers.Dense(32, activation='relu', kernel_regularizer=keras.regularizers.l2(0.01))(x)
+    x = layers.Dense(32, activation='relu')(x)
     x = layers.Dropout(0.3)(x)
     
     outputs = layers.Dense(num_emotions, activation='softmax')(x)
@@ -224,7 +198,7 @@ def train_with_class_weights():
     # Compile with label smoothing
     model.compile(
         optimizer=keras.optimizers.Adam(learning_rate=0.001),
-        loss=keras.losses.CategoricalCrossentropy(label_smoothing=0.1),
+        loss='categorical_crossentropy',
         metrics=['accuracy']
     )
     
