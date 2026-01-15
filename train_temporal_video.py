@@ -435,14 +435,9 @@ if __name__ == '__main__':
         input_shape=(48, 48, 1)
     )
     
-    # Try to use FER backbone if available
-    fer_model_path = 'models/fer_base_model.h5'
-    if os.path.exists(fer_model_path):
-        print(f"Using pre-trained FER backbone from {fer_model_path}")
-        model.build_with_fer_backbone(fer_model_path)
-    else:
-        print("Training fresh CNN-LSTM model")
-        model.build_cnn_lstm_model()
+    # Build fresh CNN-LSTM model (FER backbone loading has issues with corrupted saves)
+    print("Building fresh CNN-LSTM model for temporal emotion detection")
+    model.build_cnn_lstm_model()
     
     print("\nModel Architecture:")
     model.model.summary()

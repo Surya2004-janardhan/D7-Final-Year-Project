@@ -222,31 +222,77 @@ def plot_training_history(history, save_path='plots/fer_training.png'):
 
 
 if __name__ == '__main__':
-    # Paths
-    FER_TRAIN_DIR = 'fer-data/train'
-    FER_TEST_DIR = 'fer-data/test'
+    import shutil
+    from sklearn.model_selection import train_test_split
+    import glob
+    
+    # Paths - use test folder as main data since train is incomplete
+    FER_DATA_DIR = 'fer-data/test'
+    FER_TRAIN_DIR = 'fer-data/train_split'
+    FER_VAL_DIR = 'fer-data/val_split'
     
     print("=" * 60)
     print("Training FER-2013 Base Model")
     print("=" * 60)
     
-    # Check if directories exist
-    if not os.path.exists(FER_TRAIN_DIR):
-        print(f"Error: Training directory not found: {FER_TRAIN_DIR}")
+    # Check if data exists
+    if not os.path.exists(FER_DATA_DIR):
+        print(f"Error: Data directory not found: {FER_DATA_DIR}")
         exit(1)
     
+    # Create train/val split from existing data
+    print("\nCreating train/validation split from available data...")
+    
+    # Clean up old splits
+    for split_dir in [FER_TRAIN_DIR, FER_VAL_DIR]:
+        if os.path.exists(split_dir):
+            shutil.rmtree(split_dir)
+        os.makedirs(split_dir, exist_ok=True)
+    
+    # Get all emotion classes
+    emotion_dirs = [d for d in os.listdir(FER_DATA_DIR) 
+                    if os.path.isdir(os.path.join(FER_DATA_DIR, d))]
+    
+    print(f"Found emotion classes: {emotion_dirs}")
+    
+    for emotion in emotion_dirs:
+        emotion_path = os.path.join(FER_DATA_DIR, emotion)
+        images = glob.glob(os.path.join(emotion_path, '*.png')) + \
+                 glob.glob(os.path.join(emotion_path, '*.jpg'))
+        
+        if len(images) == 0:
+            print(f"Warning: No images found for {emotion}")
+            continue
+        
+        # Split 80/20
+        train_imgs, val_imgs = train_test_split(images, test_size=0.2, random_state=42)
+        
+        # Create directories and copy files
+        train_emotion_dir = os.path.join(FER_TRAIN_DIR, emotion)
+        val_emotion_dir = os.path.join(FER_VAL_DIR, emotion)
+        os.makedirs(train_emotion_dir, exist_ok=True)
+        os.makedirs(val_emotion_dir, exist_ok=True)
+        
+        for img in train_imgs:
+            shutil.copy(img, train_emotion_dir)
+        for img in val_imgs:
+            shutil.copy(img, val_emotion_dir)
+        
+        print(f"  {emotion}: {len(train_imgs)} train, {len(val_imgs)} val")
+    
     # Create model
-    fer_model = FERModel(num_classes=8, input_shape=(48, 48, 1))
+    num_classes = len(emotion_dirs)
+    fer_model = FERModel(num_classes=num_classes, input_shape=(48, 48, 1))
     fer_model.build_model()
     
-    print("\nModel Architecture:")
+    print(f"\nModel Architecture ({num_classes} classes):")
     fer_model.model.summary()
     
     # Train
     print("\nStarting training...")
     history = fer_model.train(
         train_dir=FER_TRAIN_DIR,
-        val_dir=FER_TEST_DIR,
+        val_dir=FER_VAL_DIR,
         epochs=50,
         batch_size=64
     )
@@ -258,7 +304,7 @@ if __name__ == '__main__':
     from tensorflow.keras.preprocessing.image import ImageDataGenerator
     test_datagen = ImageDataGenerator(rescale=1./255)
     test_generator = test_datagen.flow_from_directory(
-        FER_TEST_DIR,
+        FER_VAL_DIR,
         target_size=(48, 48),
         color_mode='grayscale',
         batch_size=64,
