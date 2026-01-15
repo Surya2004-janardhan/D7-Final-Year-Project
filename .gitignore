@@ -5,6 +5,7 @@ __pycache__/
 
 Emotion-Recognition_SER-FER_RAVDESS/
 
+fer-data/
 # C extensions
 *.so
 data/

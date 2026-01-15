@@ -168,6 +168,47 @@ class RAVDESSDataLoader:
         
         return X, y
     
+    def augment_video_data(self, X):
+        """
+        Apply data augmentation to video frames
+        - Random brightness adjustment
+        - Random horizontal flip
+        - Random noise addition
+        Helps prevent overfitting on small dataset
+        """
+        augmented = []
+        
+        for video_frames in X:  # video_frames shape: (n_frames, 128, 128, 3)
+            augmented_frames = []
+            
+            # Randomly choose augmentation for this video
+            do_flip = np.random.rand() > 0.5
+            do_brightness = np.random.rand() > 0.5
+            do_noise = np.random.rand() > 0.7
+            brightness_factor = np.random.uniform(0.8, 1.2)
+            
+            for frame in video_frames:
+                aug_frame = frame.copy()
+                
+                # Random horizontal flip
+                if do_flip:
+                    aug_frame = np.fliplr(aug_frame)
+                
+                # Random brightness
+                if do_brightness:
+                    aug_frame = np.clip(aug_frame * brightness_factor, 0, 1)
+                
+                # Random noise (small Gaussian)
+                if do_noise:
+                    noise = np.random.normal(0, 0.02, aug_frame.shape)
+                    aug_frame = np.clip(aug_frame + noise, 0, 1)
+                
+                augmented_frames.append(aug_frame)
+            
+            augmented.append(np.array(augmented_frames))
+        
+        return np.array(augmented)
+    
     def save_features(self, X, y, filepath):
         """Save extracted features to disk"""
         data = {'X': X, 'y': y, 'label_encoder': self.label_encoder}

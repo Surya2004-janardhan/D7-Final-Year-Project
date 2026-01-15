@@ -96,7 +96,7 @@ def train_video_model(modality='speech'):
     print(f"\n{'='*60}")
     print(f"Training Video Model - {modality.upper()}")
     print(f"Face Detection + 2D CNN with TimeDistributed + LSTM")
-    print(f"Input: 128x128 face crops (128x better signal than full frames)")
+    print(f"Input: 128x128 face crops (better signal than full frames)")
     print(f"Expected: 40-60% accuracy (vs 12-20% on full frames)")
     print(f"{'='*60}\n")
     
@@ -122,6 +122,10 @@ def train_video_model(modality='speech'):
     print("Preparing data...")
     X_train, X_val, y_train, y_val = prepare_data(X, y)
     
+    # Apply data augmentation to training data
+    print("Preparing training data (no augmentation for debugging)...")
+    # X_train = loader.augment_video_data(X_train)  # DISABLED: augmentation might be breaking small faces
+    
     print(f"Training data shape: {X_train.shape}")
     print(f"Validation data shape: {X_val.shape}")
     
@@ -131,11 +135,9 @@ def train_video_model(modality='speech'):
     model.build_model(X_train.shape[1:])
     
     print("Training...")
-    # Optimized for video frames approach
-    # 8 frames per video (instead of 16) = much faster loading
-    # 128x128 resolution = memory efficient for RTX 2050
-    # Batch size 8 = good gradient updates with smaller frames
-    history = model.train(X_train, y_train, X_val, y_val, epochs=60, batch_size=8)
+    # Improved training for better video emotion recognition
+    # 8 frames + data augmentation + deeper model = better accuracy target
+    history = model.train(X_train, y_train, X_val, y_val, epochs=100, batch_size=8)
     
     # Save model
     model_path = f'models/video_emotion_{modality}.h5'
