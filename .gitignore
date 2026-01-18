@@ -2,7 +2,7 @@
 __pycache__/
 *.py[codz]
 *$py.class
-
+expW/
 Emotion-Recognition_SER-FER_RAVDESS/
 
 fer-data/

@@ -164,48 +164,24 @@ class AudioFeatureExtractor:
 
 def build_video_model(input_shape=(96, 96, 3), num_classes=5):
     """
-    Build simple CNN video model (avoiding memory issues with pretrained models)
+    Build EfficientNetB0 video model for transfer learning
     """
+    from tensorflow.keras.applications import EfficientNetB0
     inputs = layers.Input(shape=input_shape)
-    
-    # Convert to grayscale for simpler processing
-    x = layers.Lambda(lambda img: tf.reduce_mean(img, axis=-1, keepdims=True))(inputs)
-    
-    # Simple CNN
-    x = layers.Conv2D(32, (3, 3), padding='same', activation='relu')(x)
+    base = EfficientNetB0(include_top=False, weights='imagenet', input_shape=input_shape, pooling='avg')
+    base.trainable = False  # Freeze backbone for fusion
+    x = base(inputs)
+    x = layers.Dense(256, activation='relu')(x)
     x = layers.BatchNormalization()(x)
-    x = layers.MaxPooling2D((2, 2))(x)
-    x = layers.Dropout(0.25)(x)
-    
-    x = layers.Conv2D(64, (3, 3), padding='same', activation='relu')(x)
-    x = layers.BatchNormalization()(x)
-    x = layers.MaxPooling2D((2, 2))(x)
-    x = layers.Dropout(0.25)(x)
-    
-    x = layers.Conv2D(128, (3, 3), padding='same', activation='relu')(x)
-    x = layers.BatchNormalization()(x)
-    x = layers.MaxPooling2D((2, 2))(x)
-    x = layers.Dropout(0.25)(x)
-    
-    x = layers.Conv2D(128, (3, 3), padding='same', activation='relu')(x)
-    x = layers.GlobalAveragePooling2D()(x)
-    
-    # Classification head
-    x = layers.Dense(128, activation='relu')(x)
     x = layers.Dropout(0.5)(x)
-    x = layers.Dense(64, activation='relu')(x)
-    x = layers.Dropout(0.3)(x)
     outputs = layers.Dense(num_classes, activation='softmax')(x)
-    
     model = models.Model(inputs=inputs, outputs=outputs)
-    
     model.compile(
         optimizer=keras.optimizers.Adam(learning_rate=0.001),
         loss='categorical_crossentropy',
         metrics=['accuracy']
     )
-    
-    return model, None  # No base model to return
+    return model, base
 
 
 def build_audio_model(input_shape=(100, 40), num_classes=5):
