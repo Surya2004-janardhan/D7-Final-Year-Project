@@ -4,7 +4,13 @@ __pycache__/
 *$py.class
 expW/
 Emotion-Recognition_SER-FER_RAVDESS/
+Emo-DB.zip/
+Emo-DB/
 
+*.zip
+
+
+archive/
 fer-data/
 # C extensions
 *.so
