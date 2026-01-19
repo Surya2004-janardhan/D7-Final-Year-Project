@@ -4,8 +4,8 @@ import numpy as np
 from tqdm import tqdm
 
 # RAVDESS dataset path (adjust if needed)
-RAVDESS_PATH = 'data'
-OUTPUT_DIR = 'data/audio_features'
+RAVDESS_PATH = os.path.join(os.path.dirname(__file__), '../data')
+OUTPUT_DIR = os.path.join(os.path.dirname(__file__), '../data/audio_features')
 
 # MFCC parameters
 SR = 22050
@@ -42,9 +42,12 @@ def process_ravdess():
         
         for file in tqdm(files):
             audio_path = os.path.join(actor_path, file)
+            output_path = os.path.join(OUTPUT_DIR, file.replace('.wav', '.npy'))
+            if os.path.exists(output_path):
+                continue
+            print(f"Processing {file}...")
             try:
                 mfcc = extract_mfcc(audio_path)
-                output_path = os.path.join(OUTPUT_DIR, file.replace('.wav', '.npy'))
                 np.save(output_path, mfcc)
             except Exception as e:
                 print(f"Error processing {file}: {e}")

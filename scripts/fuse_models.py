@@ -4,10 +4,10 @@ import tensorflow as tf
 from tensorflow import keras
 
 # Paths
-AUDIO_MODEL_PATH = 'models/audio_emotion_model.h5'
-VIDEO_MODEL_PATH = 'models/video_emotion_model.h5'
-TEST_FEATURE_DIR = 'data/audio_features'  # Assuming same for video
-TEST_FRAME_DIR = 'data/video_frames'
+AUDIO_MODEL_PATH = os.path.join(os.path.dirname(__file__), '../models/audio_emotion_model.h5')
+VIDEO_MODEL_PATH = os.path.join(os.path.dirname(__file__), '../models/video_emotion_model.h5')
+TEST_FEATURE_DIR = os.path.join(os.path.dirname(__file__), '../data/audio_features')
+TEST_FRAME_DIR = os.path.join(os.path.dirname(__file__), '../data/video_frames')
 
 EMOTIONS = ['neutral', 'happy', 'sad', 'angry', 'fear', 'disgust', 'surprise']
 
@@ -36,19 +36,29 @@ def evaluate_fusion():
 
     # Load test data (assuming a test split; for simplicity, use all and split)
     # In practice, load only test features
+    print("TEST_FEATURE_DIR:", TEST_FEATURE_DIR)
+    print("TEST_FRAME_DIR:", TEST_FRAME_DIR)
+    print("Video dir exists:", os.path.exists(TEST_FRAME_DIR))
+    if os.path.exists(TEST_FRAME_DIR):
+        video_files = os.listdir(TEST_FRAME_DIR)
+        print(f"Video files: {len(video_files)}, first 5: {video_files[:5]}")
     audio_features = []
     video_features = []
     labels = []
 
-    for file in os.listdir(TEST_FEATURE_DIR):
+    files = os.listdir(TEST_FEATURE_DIR)
+    print(f"Files in audio dir: {len(files)}, first 5: {files[:5]}")
+    for i, file in enumerate(files):
         if file.endswith('.npy'):
-            audio_feat = np.load(os.path.join(TEST_FEATURE_DIR, file))
-            audio_features.append(audio_feat)
+            # Corresponding video: replace '03' with '01' in filename
+            video_file = file.replace('03-', '01-', 1)
+            video_path = os.path.join(TEST_FRAME_DIR, video_file)
+            if os.path.exists(video_path):
+                # load etc
+                audio_feat = np.load(os.path.join(TEST_FEATURE_DIR, file))
+                audio_features.append(audio_feat)
 
-            # Corresponding video
-            video_file = file.replace('.npy', '.npy')  # Assuming same naming
-            if os.path.exists(os.path.join(TEST_FRAME_DIR, video_file)):
-                video_feat = np.load(os.path.join(TEST_FRAME_DIR, video_file))
+                video_feat = np.load(video_path)
                 # Extract features as in training
                 base_model = keras.applications.MobileNetV2(weights='imagenet', include_top=False, input_shape=(112, 112, 3))
                 base_model.trainable = False
@@ -63,11 +73,12 @@ def evaluate_fusion():
 
                 # Label
                 parts = file.split('-')
-                emotion_idx = int(parts[2]) - 1
-                if emotion_idx == 1:
-                    emotion_idx = 0
+                emotion_code = parts[2]
+                emotion_map = {'01': 0, '02': 0, '03': 1, '04': 2, '05': 3, '06': 4, '07': 5, '08': 6}
+                emotion_idx = emotion_map.get(emotion_code, 0)
                 labels.append(emotion_idx)
 
+    print(f"Loaded {len(audio_features)} audio, {len(video_features)} video, {len(labels)} labels")
     audio_features = np.array(audio_features)
     video_features = np.array(video_features)
     labels = np.array(labels)

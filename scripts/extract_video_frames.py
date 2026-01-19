@@ -36,18 +36,29 @@ def sample_frames(video_path):
 def process_ravdess_videos():
     """Process all RAVDESS video files and save sampled frames."""
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-    for root, dirs, files in os.walk(RAVDESS_VIDEO_PATH):
+    
+    # Only process Actor directories
+    actor_dirs = [d for d in os.listdir(RAVDESS_VIDEO_PATH) if d.startswith('Actor_')]
+    print(f"Found {len(actor_dirs)} actor directories: {actor_dirs[:5]}...")
+    
+    for actor_dir in actor_dirs:
+        actor_path = os.path.join(RAVDESS_VIDEO_PATH, actor_dir)
+        files = [f for f in os.listdir(actor_path) if f.endswith('.mp4')]
+        print(f"Processing {actor_dir} with {len(files)} files...")
+        
         for file in tqdm(files):
-            if file.endswith('.mp4'):
-                video_path = os.path.join(root, file)
-                try:
-                    frames = sample_frames(video_path)
-                    if frames is not None:
-                        output_path = os.path.join(OUTPUT_DIR, file.replace('.mp4', '.npy'))
-                        np.save(output_path, frames)
-                except Exception as e:
-                    print(f"Error processing {file}: {e}")
+            output_path = os.path.join(OUTPUT_DIR, file.replace('.mp4', '.npy'))
+            if os.path.exists(output_path):
+                continue  # Skip if already processed
+            video_path = os.path.join(actor_path, file)
+            try:
+                frames = sample_frames(video_path)
+                if frames is not None:
+                    np.save(output_path, frames)
+            except Exception as e:
+                print(f"Error processing {file}: {e}")
+        
+        print(f"Finished {actor_dir}")
 
 if __name__ == "__main__":
     process_ravdess_videos()

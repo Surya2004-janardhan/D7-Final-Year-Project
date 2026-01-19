@@ -5,27 +5,41 @@ from tensorflow import keras
 from tensorflow.keras import layers
 from sklearn.model_selection import train_test_split
 from sklearn.utils.class_weight import compute_class_weight
+from tqdm import tqdm
+
+class TrainingLogger(keras.callbacks.Callback):
+    def on_epoch_begin(self, epoch, logs=None):
+        if epoch in [0, 9, 24, 49]:
+            print(f"Starting epoch {epoch+1}")
+    
+    def on_epoch_end(self, epoch, logs=None):
+        if epoch in [9, 24, 49]:
+            print(f"Epoch {epoch+1} complete - loss: {logs['loss']:.4f}, acc: {logs['accuracy']:.4f}, val_acc: {logs['val_accuracy']:.4f}")
 
 # Paths
-FEATURE_DIR = 'data/audio_features'
+FEATURE_DIR = os.path.join(os.path.dirname(__file__), '../data/audio_features')
 EMOTIONS = ['neutral', 'happy', 'sad', 'angry', 'fear', 'disgust', 'surprise']  # RAVDESS classes
 
 def load_audio_data():
     """Load MFCC features and labels."""
+    print("FEATURE_DIR:", FEATURE_DIR, flush=True)
     features = []
     labels = []
 
-    for file in os.listdir(FEATURE_DIR):
-        if file.endswith('.npy'):
-            mfcc = np.load(os.path.join(FEATURE_DIR, file))
-            features.append(mfcc)
+    files = [f for f in os.listdir(FEATURE_DIR) if f.endswith('.npy')]
+    print(f"Loading {len(files)} audio features...", flush=True)
+    for i, file in enumerate(files):
+        if i % 500 == 0:
+            print(f"Loaded {i}/{len(files)} files...", flush=True)
+        mfcc = np.load(os.path.join(FEATURE_DIR, file))
+        features.append(mfcc)
 
-            # Extract emotion from filename (RAVDESS format: 03-01-01-01-01-01-01.wav -> emotion is 3rd part)
-            parts = file.split('-')
-            emotion_idx = int(parts[2]) - 1  # 01=neutral, 02=calm->neutral, etc.
-            if emotion_idx == 1:  # calm -> neutral
-                emotion_idx = 0
-            labels.append(emotion_idx)
+        # Extract emotion from filename (RAVDESS format: 03-01-01-01-01-01-01.wav -> emotion is 3rd part)
+        parts = file.split('-')
+        emotion_code = parts[2]
+        emotion_map = {'01': 0, '02': 0, '03': 1, '04': 2, '05': 3, '06': 4, '07': 5, '08': 6}
+        emotion_idx = emotion_map.get(emotion_code, 0)  # default to 0 if unknown
+        labels.append(emotion_idx)
 
     return np.array(features), np.array(labels)
 
@@ -48,7 +62,9 @@ def build_audio_model():
 
 def train_audio_model():
     """Train the audio model."""
+    print("Starting audio model training...", flush=True)
     X, y = load_audio_data()
+    print(f"Data loaded: X.shape={X.shape}, y.shape={y.shape}", flush=True)
     y_cat = keras.utils.to_categorical(y, num_classes=7)
 
     X_train, X_val, y_train, y_val = train_test_split(X, y_cat, test_size=0.2, random_state=42, stratify=y)
@@ -61,7 +77,8 @@ def train_audio_model():
 
     callbacks = [
         keras.callbacks.EarlyStopping(patience=10, restore_best_weights=True),
-        keras.callbacks.ReduceLROnPlateau(factor=0.5, patience=5)
+        keras.callbacks.ReduceLROnPlateau(factor=0.5, patience=5),
+        TrainingLogger()
     ]
 
     history = model.fit(
@@ -73,8 +90,9 @@ def train_audio_model():
         callbacks=callbacks
     )
 
-    model.save('models/audio_emotion_model.h5')
-    print("Audio model trained and saved.")
+    print(f"Audio training complete. Final train acc: {history.history['accuracy'][-1]:.4f}, val acc: {history.history['val_accuracy'][-1]:.4f}", flush=True)
+    model.save(os.path.join(os.path.dirname(__file__), '../models/audio_emotion_model.h5'))
+    print("Audio model trained and saved.", flush=True)
 
 if __name__ == "__main__":
     train_audio_model()
