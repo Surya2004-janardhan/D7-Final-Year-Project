@@ -38,10 +38,10 @@ except Exception as e:
 def extract_mfcc(audio_path):
     """Extract MFCC features from audio file."""
     try:
-        y, _ = librosa.load(audio_path, sr=SR)
+        y, sr = librosa.load(audio_path, sr=SR)
         if len(y) == 0:
             raise ValueError("Empty audio")
-        mfcc = librosa.feature.mfcc(y=y, sr=SR, n_mfcc=N_MFCC, hop_length=HOP_LENGTH)
+        mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=N_MFCC, hop_length=HOP_LENGTH)
         mfcc = mfcc.T
 
         if mfcc.shape[0] < N_FRAMES:
@@ -58,6 +58,8 @@ def sample_frames(video_path):
     """Sample NUM_FRAMES from video uniformly."""
     cap = cv2.VideoCapture(video_path)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+
 
     if total_frames == 0:
         return None
@@ -89,19 +91,23 @@ def process():
         return jsonify({'error': 'Models not loaded'})
 
     try:
-        # Save uploaded file (video with audio)
+        # Save uploaded files
         video_file = request.files['video']
+        audio_file = request.files['audio']
 
         video_path = 'temp_video.webm'
-        print(f"Saving file to {video_path}")
+        audio_path = 'temp_audio.webm'
+        print(f"Saving files to {video_path} and {audio_path}")
 
         video_file.save(video_path)
+        audio_file.save(audio_path)
 
-        # Process audio from video
+        # Process audio
         print("Extracting audio features...")
-        mfcc = extract_mfcc(video_path)
+        mfcc = extract_mfcc(audio_path)
         if mfcc is None:
             os.remove(video_path)
+            os.remove(audio_path)
             return jsonify({'error': 'Could not extract audio features'})
         print(f"MFCC shape: {mfcc.shape}")
 
@@ -110,6 +116,7 @@ def process():
         frames = sample_frames(video_path)
         if frames is None:
             os.remove(video_path)
+            os.remove(audio_path)
             return jsonify({'error': 'Could not extract frames from video'})
 
         print(f"Frames shape: {frames.shape}")
@@ -146,6 +153,7 @@ def process():
 
         # Clean up
         os.remove(video_path)
+        os.remove(audio_path)
         print("Processing complete")
 
         return jsonify({
@@ -157,8 +165,9 @@ def process():
     except Exception as e:
         print(f"Error during processing: {e}")
         # Clean up on error
-        if os.path.exists('temp_video.webm'):
-            os.remove('temp_video.webm')
+        for path in ['temp_video.webm', 'temp_audio.webm']:
+            if os.path.exists(path):
+                os.remove(path)
         return jsonify({'error': str(e)})
 
 if __name__ == '__main__':

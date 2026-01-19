@@ -74,11 +74,14 @@
     </div>
 
     <script>
-        let mediaRecorder;
-        let recordedChunks = [];
-        let audioChunks = [];
+        let mediaRecorderVideo;
+        let mediaRecorderAudio;
+        let recordedVideoChunks = [];
+        let recordedAudioChunks = [];
         let videoStream;
         let audioStream;
+        let videoBlob;
+        let audioBlob;
 
         const video = document.getElementById('video');
         const recordBtn = document.getElementById('recordBtn');
@@ -93,28 +96,34 @@
 
                 video.srcObject = videoStream;
 
-                // Combine streams
-                const combinedStream = new MediaStream([
-                    ...videoStream.getVideoTracks(),
-                    ...audioStream.getAudioTracks()
-                ]);
-
-                mediaRecorder = new MediaRecorder(combinedStream, {
+                // Video recorder
+                mediaRecorderVideo = new MediaRecorder(videoStream, {
                     mimeType: 'video/webm'
                 });
-
-                mediaRecorder.ondataavailable = (event) => {
+                mediaRecorderVideo.ondataavailable = (event) => {
                     if (event.data.size > 0) {
-                        recordedChunks.push(event.data);
+                        recordedVideoChunks.push(event.data);
                     }
                 };
+                mediaRecorderVideo.onstop = () => {
+                    videoBlob = new Blob(recordedVideoChunks, { type: 'video/webm' });
+                    recordedVideoChunks = [];
+                    checkAndSend();
+                };
 
-                mediaRecorder.onstop = () => {
-                    const blob = new Blob(recordedChunks, { type: 'video/webm' });
-                    recordedChunks = [];
-
-                    // Send to server
-                    sendToServer(blob);
+                // Audio recorder
+                mediaRecorderAudio = new MediaRecorder(audioStream, {
+                    mimeType: 'audio/webm'
+                });
+                mediaRecorderAudio.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        recordedAudioChunks.push(event.data);
+                    }
+                };
+                mediaRecorderAudio.onstop = () => {
+                    audioBlob = new Blob(recordedAudioChunks, { type: 'audio/webm' });
+                    recordedAudioChunks = [];
+                    checkAndSend();
                 };
 
                 recordBtn.disabled = false;
@@ -126,23 +135,35 @@
             }
         }
 
+        function checkAndSend() {
+            if (videoBlob && audioBlob) {
+                sendToServer(videoBlob, audioBlob);
+                videoBlob = null;
+                audioBlob = null;
+            }
+        }
+
         // Start recording
         recordBtn.onclick = () => {
-            if (mediaRecorder.state === 'recording') {
-                mediaRecorder.stop();
+            if (mediaRecorderVideo.state === 'recording') {
+                mediaRecorderVideo.stop();
+                mediaRecorderAudio.stop();
                 recordBtn.textContent = 'Processing...';
                 recordBtn.disabled = true;
                 status.textContent = 'Recording stopped. Processing...';
             } else {
-                recordedChunks = [];
-                mediaRecorder.start();
+                recordedVideoChunks = [];
+                recordedAudioChunks = [];
+                mediaRecorderVideo.start();
+                mediaRecorderAudio.start();
                 recordBtn.textContent = 'Stop Recording';
                 status.textContent = 'Recording... (15 seconds)';
 
                 // Auto-stop after 15 seconds
                 setTimeout(() => {
-                    if (mediaRecorder.state === 'recording') {
-                        mediaRecorder.stop();
+                    if (mediaRecorderVideo.state === 'recording') {
+                        mediaRecorderVideo.stop();
+                        mediaRecorderAudio.stop();
                         recordBtn.textContent = 'Processing...';
                         recordBtn.disabled = true;
                         status.textContent = 'Recording stopped. Processing...';
@@ -152,9 +173,10 @@
         };
 
         // Send recorded data to server
-        async function sendToServer(videoBlob) {
+        async function sendToServer(videoBlob, audioBlob) {
             const formData = new FormData();
             formData.append('video', videoBlob, 'recording.webm');
+            formData.append('audio', audioBlob, 'recording_audio.webm');
 
             try {
                 const response = await fetch('/process', {
