@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emotion Recognition Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        video {
+            width: 100%;
+            max-width: 640px;
+            border-radius: 10px;
+        }
+        button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 15px 32px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 10px 2px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        #results {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #e7f3ff;
+            border-radius: 5px;
+            display: none;
+        }
+        .emotion-result {
+            font-size: 18px;
+            margin: 5px 0;
+        }
+        .error {
+            color: red;
+            background-color: #ffe6e6;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Emotion Recognition Demo</h1>
+        <p>Click "Start Recording" to record 15 seconds of video and audio for emotion analysis.</p>
+
+        <video id="video" autoplay muted></video>
+        <br><br>
+        <button id="recordBtn">Start Recording</button>
+        <div id="status"></div>
+
+        <div id="results"></div>
+    </div>
+
+    <script>
+        let mediaRecorder;
+        let recordedChunks = [];
+        let audioChunks = [];
+        let videoStream;
+        let audioStream;
+
+        const video = document.getElementById('video');
+        const recordBtn = document.getElementById('recordBtn');
+        const status = document.getElementById('status');
+        const results = document.getElementById('results');
+
+        // Get user media
+        async function getMedia() {
+            try {
+                videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+                video.srcObject = videoStream;
+
+                // Combine streams
+                const combinedStream = new MediaStream([
+                    ...videoStream.getVideoTracks(),
+                    ...audioStream.getAudioTracks()
+                ]);
+
+                mediaRecorder = new MediaRecorder(combinedStream, {
+                    mimeType: 'video/webm'
+                });
+
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        recordedChunks.push(event.data);
+                    }
+                };
+
+                mediaRecorder.onstop = () => {
+                    const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                    recordedChunks = [];
+
+                    // Send to server
+                    sendToServer(blob);
+                };
+
+                recordBtn.disabled = false;
+                status.textContent = 'Ready to record. Click "Start Recording".';
+
+            } catch (error) {
+                console.error('Error accessing media devices:', error);
+                status.textContent = 'Error: Could not access camera or microphone.';
+            }
+        }
+
+        // Start recording
+        recordBtn.onclick = () => {
+            if (mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+                recordBtn.textContent = 'Processing...';
+                recordBtn.disabled = true;
+                status.textContent = 'Recording stopped. Processing...';
+            } else {
+                recordedChunks = [];
+                mediaRecorder.start();
+                recordBtn.textContent = 'Stop Recording';
+                status.textContent = 'Recording... (15 seconds)';
+
+                // Auto-stop after 15 seconds
+                setTimeout(() => {
+                    if (mediaRecorder.state === 'recording') {
+                        mediaRecorder.stop();
+                        recordBtn.textContent = 'Processing...';
+                        recordBtn.disabled = true;
+                        status.textContent = 'Recording stopped. Processing...';
+                    }
+                }, 15000);
+            }
+        };
+
+        // Send recorded data to server
+        async function sendToServer(videoBlob) {
+            const formData = new FormData();
+            formData.append('video', videoBlob, 'recording.webm');
+
+            try {
+                const response = await fetch('/process', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    results.innerHTML = `<div class="error">Error: ${data.error}</div>`;
+                } else {
+                    results.innerHTML = `
+                        <h3>Emotion Recognition Results:</h3>
+                        <div class="emotion-result">Audio Emotion: ${data.audio_emotion}</div>
+                        <div class="emotion-result">Video Emotion: ${data.video_emotion}</div>
+                        <div class="emotion-result"><strong>Fused Emotion: ${data.fused_emotion}</strong></div>
+                    `;
+                }
+
+                results.style.display = 'block';
+                recordBtn.textContent = 'Start Recording';
+                recordBtn.disabled = false;
+                status.textContent = 'Ready to record again.';
+
+            } catch (error) {
+                console.error('Error sending data:', error);
+                results.innerHTML = '<div class="error">Error processing recording.</div>';
+                results.style.display = 'block';
+                recordBtn.textContent = 'Start Recording';
+                recordBtn.disabled = false;
+            }
+        }
+
+        // Initialize
+        getMedia();
+    </script>
+</body>
+</html>
