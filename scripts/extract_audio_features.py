@@ -37,12 +37,12 @@ def process_ravdess():
     
     for actor_dir in actor_dirs:
         actor_path = os.path.join(RAVDESS_PATH, actor_dir)
-        files = [f for f in os.listdir(actor_path) if f.endswith('.wav')]
+        files = [f for f in os.listdir(actor_path) if f.endswith('.mp4') and f.startswith('01-')]
         print(f"Processing {actor_dir} with {len(files)} files...")
         
         for file in tqdm(files):
             audio_path = os.path.join(actor_path, file)
-            output_path = os.path.join(OUTPUT_DIR, file.replace('.wav', '.npy'))
+            output_path = os.path.join(OUTPUT_DIR, file.replace('.mp4', '.npy'))
             if os.path.exists(output_path):
                 continue
             print(f"Processing {file}...")

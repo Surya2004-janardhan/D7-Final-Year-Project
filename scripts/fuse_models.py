@@ -48,6 +48,11 @@ def evaluate_fusion():
 
     files = os.listdir(TEST_FEATURE_DIR)
     print(f"Files in audio dir: {len(files)}, first 5: {files[:5]}")
+    
+    # Load base model once
+    base_model = keras.applications.MobileNetV2(weights='imagenet', include_top=False, input_shape=(112, 112, 3))
+    base_model.trainable = False
+    
     for i, file in enumerate(files):
         if file.endswith('.npy'):
             # Corresponding video: replace '03' with '01' in filename
@@ -60,8 +65,6 @@ def evaluate_fusion():
 
                 video_feat = np.load(video_path)
                 # Extract features as in training
-                base_model = keras.applications.MobileNetV2(weights='imagenet', include_top=False, input_shape=(112, 112, 3))
-                base_model.trainable = False
                 frame_features = []
                 for frame in video_feat:
                     frame = np.expand_dims(frame, axis=0)
