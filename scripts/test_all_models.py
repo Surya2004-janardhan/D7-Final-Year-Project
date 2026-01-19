@@ -13,6 +13,7 @@ import seaborn as sns
 from pathlib import Path
 from tqdm import tqdm
 import cv2
+import librosa
 
 # Ensure plots directory exists
 os.makedirs('plots', exist_ok=True)
@@ -44,16 +45,64 @@ EMOTION_TO_IDX_5 = {
     'surprised': 1  # Merge surprised with happy
 }
 
+# MFCC parameters
+SR = 22050
+N_MFCC = 13
+HOP_LENGTH = 512
+N_FRAMES = 300
+
+# Video parameters
+NUM_FRAMES = 16
+TARGET_SIZE = (112, 112)
+
+def extract_mfcc(audio_path):
+    """Extract MFCC features from audio file."""
+    y, _ = librosa.load(audio_path, sr=SR)
+    mfcc = librosa.feature.mfcc(y=y, sr=SR, n_mfcc=N_MFCC, hop_length=HOP_LENGTH)
+    mfcc = mfcc.T  # (time, mfcc)
+
+    # Pad or truncate to N_FRAMES
+    if mfcc.shape[0] < N_FRAMES:
+        mfcc = np.pad(mfcc, ((0, N_FRAMES - mfcc.shape[0]), (0, 0)), mode='constant')
+    else:
+        mfcc = mfcc[:N_FRAMES]
+
+    return mfcc[..., np.newaxis]  # (300, 13, 1)
+
+def sample_frames(video_path):
+    """Sample NUM_FRAMES from video uniformly."""
+    cap = cv2.VideoCapture(video_path)
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+    if total_frames == 0:
+        return None
+
+    step = max(1, total_frames // NUM_FRAMES)
+    frames = []
+
+    for i in range(0, total_frames, step):
+        cap.set(cv2.CAP_PROP_POS_FRAMES, i)
+        ret, frame = cap.read()
+        if ret:
+            frame = cv2.resize(frame, TARGET_SIZE) / 255.0
+            frames.append(frame)
+        if len(frames) == NUM_FRAMES:
+            break
+
+    cap.release()
+    return np.array(frames) if len(frames) == NUM_FRAMES else None
+
 def load_audio_test_data(max_samples=1000, num_emotions=7):
-    """Load audio features for testing"""
+    """Load audio features for testing from raw .wav files"""
     emotion_to_idx = EMOTION_TO_IDX_7 if num_emotions == 7 else EMOTION_TO_IDX_5
-    audio_dir = Path('data/audio_features')
+    data_dir = Path('../data')
     X_audio, y_audio = [], []
 
-    files = list(audio_dir.glob('*.npy'))
-    print(f"Found {len(files)} audio feature files")
+    # Glob for audio files (03- modality for audio-only)
+    audio_files = list(data_dir.glob('Actor_*/03-*.wav'))
+    print(f"Found {len(audio_files)} audio files")
 
-    for file in tqdm(files[:max_samples], desc="Loading audio features"):
+    for file in tqdm(audio_files[:max_samples], desc="Extracting audio features"):
         parts = file.stem.split('-')
         if len(parts) >= 3:
             emotion_code = parts[2]
@@ -62,28 +111,29 @@ def load_audio_test_data(max_samples=1000, num_emotions=7):
                 emotion_idx = emotion_to_idx[emotion_name]
 
                 try:
-                    feat = np.load(file)
+                    feat = extract_mfcc(str(file))
                     X_audio.append(feat)
                     y_audio.append(emotion_idx)
                 except Exception as e:
-                    print(f"Error loading {file}: {e}")
+                    print(f"Error processing {file}: {e}")
 
     return np.array(X_audio), np.array(y_audio)
 
 def load_video_test_data(max_samples=1000, num_emotions=7):
-    """Load video frames for testing"""
+    """Load video frames for testing from raw .mp4 files"""
     emotion_to_idx = EMOTION_TO_IDX_7 if num_emotions == 7 else EMOTION_TO_IDX_5
-    video_dir = Path('data/video_frames')
+    data_dir = Path('../data')
     X_video, y_video = [], []
-
-    files = list(video_dir.glob('*.npy'))
-    print(f"Found {len(files)} video frame files")
 
     # Load base model for feature extraction
     base_model = keras.applications.MobileNetV2(weights='imagenet', include_top=False, input_shape=(112, 112, 3))
     base_model.trainable = False
 
-    for file in tqdm(files[:max_samples], desc="Loading video features"):
+    # Glob for video files (01- modality for full AV)
+    video_files = list(data_dir.glob('Actor_*/01-*.mp4'))
+    print(f"Found {len(video_files)} video files")
+
+    for file in tqdm(video_files[:max_samples], desc="Extracting video features"):
         parts = file.stem.split('-')
         if len(parts) >= 3:
             emotion_code = parts[2]
@@ -92,27 +142,27 @@ def load_video_test_data(max_samples=1000, num_emotions=7):
                 emotion_idx = emotion_to_idx[emotion_name]
 
                 try:
-                    frames = np.load(file)
-                    # Extract features as in training
-                    frame_features = []
-                    for frame in frames:
-                        frame = np.expand_dims(frame, axis=0)
-                        feat = base_model(frame)
-                        feat = keras.layers.GlobalAveragePooling2D()(feat)
-                        frame_features.append(feat.numpy().flatten())
-                    video_feat_avg = np.mean(frame_features, axis=0)
-                    X_video.append(video_feat_avg)
-                    y_video.append(emotion_idx)
+                    frames = sample_frames(str(file))
+                    if frames is not None:
+                        # Extract features as in training
+                        frame_features = []
+                        for frame in frames:
+                            frame = np.expand_dims(frame, axis=0)
+                            feat = base_model(frame)
+                            feat = keras.layers.GlobalAveragePooling2D()(feat)
+                            frame_features.append(feat.numpy().flatten())
+                        video_feat_avg = np.mean(frame_features, axis=0)
+                        X_video.append(video_feat_avg)
+                        y_video.append(emotion_idx)
                 except Exception as e:
-                    print(f"Error loading {file}: {e}")
+                    print(f"Error processing {file}: {e}")
 
     return np.array(X_video), np.array(y_video)
 
 def load_matching_test_data(max_samples=500, num_emotions=7):
-    """Load matching audio and video data for fusion testing"""
+    """Load matching audio and video data for fusion testing from raw files"""
     emotion_to_idx = EMOTION_TO_IDX_7 if num_emotions == 7 else EMOTION_TO_IDX_5
-    audio_dir = Path('data/audio_features')
-    video_dir = Path('data/video_frames')
+    data_dir = Path('../data')
 
     X_audio, X_video, y = [], [], []
 
@@ -120,17 +170,18 @@ def load_matching_test_data(max_samples=500, num_emotions=7):
     base_model = keras.applications.MobileNetV2(weights='imagenet', include_top=False, input_shape=(112, 112, 3))
     base_model.trainable = False
 
-    audio_files = list(audio_dir.glob('*.npy'))
-    print(f"Found {len(audio_files)} audio files")
+    # Glob for audio files (03- .wav)
+    audio_files = list(data_dir.glob('Actor_*/03-*.wav'))
+    print(f"Found {len(audio_files)} audio files for fusion")
 
     count = 0
-    for audio_file in tqdm(audio_files, desc="Loading matching data"):
+    for audio_file in tqdm(audio_files, desc="Extracting matching features"):
         if count >= max_samples:
             break
 
         # Find corresponding video file (replace 03- with 01-)
         video_filename = audio_file.name.replace('03-', '01-', 1)
-        video_file = video_dir / video_filename
+        video_file = audio_file.parent / video_filename.replace('.wav', '.mp4')
 
         if video_file.exists():
             parts = audio_file.stem.split('-')
@@ -141,25 +192,26 @@ def load_matching_test_data(max_samples=500, num_emotions=7):
                     emotion_idx = emotion_to_idx[emotion_name]
 
                     try:
-                        # Load audio
-                        audio_feat = np.load(audio_file)
+                        # Extract audio features
+                        audio_feat = extract_mfcc(str(audio_file))
                         X_audio.append(audio_feat)
 
-                        # Load video and extract features
-                        frames = np.load(video_file)
-                        frame_features = []
-                        for frame in frames:
-                            frame = np.expand_dims(frame, axis=0)
-                            feat = base_model(frame)
-                            feat = keras.layers.GlobalAveragePooling2D()(feat)
-                            frame_features.append(feat.numpy().flatten())
-                        video_feat_avg = np.mean(frame_features, axis=0)
-                        X_video.append(video_feat_avg)
+                        # Extract video features
+                        frames = sample_frames(str(video_file))
+                        if frames is not None:
+                            frame_features = []
+                            for frame in frames:
+                                frame = np.expand_dims(frame, axis=0)
+                                feat = base_model(frame)
+                                feat = keras.layers.GlobalAveragePooling2D()(feat)
+                                frame_features.append(feat.numpy().flatten())
+                            video_feat_avg = np.mean(frame_features, axis=0)
+                            X_video.append(video_feat_avg)
 
-                        y.append(emotion_idx)
-                        count += 1
+                            y.append(emotion_idx)
+                            count += 1
                     except Exception as e:
-                        print(f"Error loading pair {audio_file.name}: {e}")
+                        print(f"Error processing pair {audio_file.name}: {e}")
 
     print(f"Loaded {len(X_audio)} matching audio-video pairs")
     return np.array(X_audio), np.array(X_video), np.array(y)
@@ -189,16 +241,16 @@ def test_model(model_path, X, y, model_name, save_plot=True):
 
     # Classification report
     print("\nClassification Report:")
-    print(classification_report(y, y_pred, target_names=emotions))
-
+    present_labels = sorted(list(set(y)))
+    present_names = [emotions[i] for i in present_labels]
+    print(classification_report(y, y_pred, target_names=present_names, labels=present_labels))
+    
     # Confusion matrix
     if save_plot:
         cm = confusion_matrix(y, y_pred)
         plt.figure(figsize=(10, 8))
         sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
-                    xticklabels=emotions, yticklabels=emotions)
-        plt.title(f'Confusion Matrix - {model_name}')
-        plt.xlabel('Predicted')
+                    xticklabels=present_names, yticklabels=present_names)
         plt.ylabel('True')
         plt.tight_layout()
         plot_path = f'plots/confusion_matrix_{model_name.lower().replace(" ", "_")}.png'
@@ -263,12 +315,12 @@ def main():
     print("="*50)
 
     # Load audio model to check num classes
-    audio_model = keras.models.load_model('models/audio_emotion_model.h5')
+    audio_model = keras.models.load_model('../models/audio_emotion_model.h5')
     audio_num_classes = audio_model.output_shape[-1]
     print(f"Audio model has {audio_num_classes} classes")
 
     # Load video model to check num classes
-    video_model = keras.models.load_model('models/video_emotion_model.h5')
+    video_model = keras.models.load_model('../models/video_emotion_model.h5')
     video_num_classes = video_model.output_shape[-1]
     print(f"Video model has {video_num_classes} classes")
 
@@ -276,7 +328,7 @@ def main():
     print("\nLoading audio test data...")
     X_audio, y_audio = load_audio_test_data(num_emotions=audio_num_classes)
     if len(X_audio) > 0:
-        audio_acc, _ = test_model('models/audio_emotion_model.h5', X_audio, y_audio, "Audio Model")
+        audio_acc, _ = test_model('../models/audio_emotion_model.h5', X_audio, y_audio, "Audio Model")
     else:
         print("No audio data found")
         audio_acc = 0
@@ -285,7 +337,7 @@ def main():
     print("\nLoading video test data...")
     X_video, y_video = load_video_test_data(num_emotions=video_num_classes)
     if len(X_video) > 0:
-        video_acc, _ = test_model('models/video_emotion_model.h5', X_video, y_video, "Video Model")
+        video_acc, _ = test_model('../models/video_emotion_model.h5', X_video, y_video, "Video Model")
     else:
         print("No video data found")
         video_acc = 0
@@ -296,7 +348,7 @@ def main():
     print("\nLoading matching audio-video test data...")
     X_audio_match, X_video_match, y_match = load_matching_test_data(num_emotions=fusion_num_classes)
     if len(X_audio_match) > 0:
-        fusion_acc, _ = test_fusion('models/audio_emotion_model.h5', 'models/video_emotion_model.h5',
+        fusion_acc, _ = test_fusion('../models/audio_emotion_model.h5', '../models/video_emotion_model.h5',
                                    X_audio_match, X_video_match, y_match)
     else:
         print("No matching data found")
