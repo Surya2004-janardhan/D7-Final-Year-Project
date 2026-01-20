@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 import librosa
 from tensorflow import keras
+import requests
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB limit for uploads
@@ -16,10 +17,13 @@ SR = 22050
 N_MFCC = 13
 HOP_LENGTH = 512
 N_FRAMES = 300
+WINDOW_SIZE = 1.0  # seconds
+HOP_SIZE = 0.5  # seconds
 
 # Video parameters
 NUM_FRAMES = 16
 TARGET_SIZE = (112, 112)
+VIDEO_WINDOW_SIZE = 2.0  # seconds for video sequences
 
 # Load models once at startup
 print("Loading models...")
@@ -35,49 +39,156 @@ except Exception as e:
     video_model = None
     base_model = None
 
+# Initialize Groq client
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "your_groq_api_key_here")
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+
 def extract_mfcc(audio_path):
-    """Extract MFCC features from audio file."""
+    """Extract MFCC features from audio file in windows."""
     try:
         y, sr = librosa.load(audio_path, sr=SR)
         if len(y) == 0:
             raise ValueError("Empty audio")
-        mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=N_MFCC, hop_length=HOP_LENGTH)
-        mfcc = mfcc.T
-
-        if mfcc.shape[0] < N_FRAMES:
-            mfcc = np.pad(mfcc, ((0, N_FRAMES - mfcc.shape[0]), (0, 0)), mode='constant')
-        else:
-            mfcc = mfcc[:N_FRAMES]
-
-        return mfcc[..., np.newaxis]
+        
+        # Calculate window parameters
+        window_samples = int(WINDOW_SIZE * SR)
+        hop_samples = int(HOP_SIZE * SR)
+        
+        mfcc_windows = []
+        for start in range(0, len(y) - window_samples + 1, hop_samples):
+            end = start + window_samples
+            y_window = y[start:end]
+            mfcc = librosa.feature.mfcc(y=y_window, sr=sr, n_mfcc=N_MFCC, hop_length=HOP_LENGTH)
+            mfcc = mfcc.T
+            
+            if mfcc.shape[0] < N_FRAMES:
+                mfcc = np.pad(mfcc, ((0, N_FRAMES - mfcc.shape[0]), (0, 0)), mode='constant')
+            else:
+                mfcc = mfcc[:N_FRAMES]
+            
+            mfcc_windows.append(mfcc[..., np.newaxis])
+        
+        return np.array(mfcc_windows) if mfcc_windows else None
     except Exception as e:
         print(f"Failed to extract MFCC: {e}")
         return None
 
-def sample_frames(video_path):
-    """Sample NUM_FRAMES from video uniformly."""
+def cognitive_reasoning(audio_emotion, video_emotion, fused_emotion, audio_preds, video_preds):
+    """Add cognitive reasoning to the emotion predictions."""
+    reasoning = []
+    
+    # Check agreement
+    if audio_emotion == video_emotion:
+        reasoning.append(f"Audio and video modalities agree on {audio_emotion}.")
+    else:
+        reasoning.append(f"Audio suggests {audio_emotion}, while video suggests {video_emotion}. Fusion resulted in {fused_emotion}.")
+    
+    # Check confidence
+    audio_conf = np.max(np.mean(audio_preds, axis=0))
+    video_conf = np.max(np.mean(video_preds, axis=0))
+    reasoning.append(f"Audio confidence: {audio_conf:.2f}, Video confidence: {video_conf:.2f}.")
+    
+    # Temporal consistency
+    audio_consistency = len(set([EMOTIONS_7[np.argmax(p)] for p in audio_preds])) / len(audio_preds)
+    video_consistency = len(set([EMOTIONS_7[np.argmax(p)] for p in video_preds])) / len(video_preds)
+    reasoning.append(f"Temporal consistency - Audio: {audio_consistency:.2f}, Video: {video_consistency:.2f}.")
+    
+    # Human-like reasoning
+    if fused_emotion in ['angry', 'fearful', 'sad']:
+        reasoning.append("Detected negative emotion. Consider context: is this appropriate for the situation?")
+    elif fused_emotion in ['happy', 'surprised']:
+        reasoning.append("Positive emotion detected. This might indicate engagement or excitement.")
+    elif fused_emotion == 'neutral':
+        reasoning.append("Neutral expression. Could indicate calmness or lack of strong emotion.")
+    
+    # Modality reliability
+    if audio_conf > video_conf:
+        reasoning.append("Audio seems more reliable than video in this case.")
+    elif video_conf > audio_conf:
+        reasoning.append("Video seems more reliable than audio in this case.")
+    
+    return " ".join(reasoning)
+
+def generate_llm_content(fused_emotion, reasoning, audio_temporal, video_temporal):
+    """Generate story, quote, video, and songs using Groq LLM."""
+    prompt = f"""
+Based on the detected emotion: {fused_emotion}
+Cognitive reasoning: {reasoning}
+Temporal audio emotions: {', '.join(audio_temporal)}
+Temporal video emotions: {', '.join(video_temporal)}
+
+Generate:
+1. A short story (2-3 sentences) related to this emotion.
+2. An inspirational quote about this emotion.
+3. A YouTube video suggestion (title and why it fits).
+4. 2-3 song recommendations strongly relevant to this emotion, with artist names.
+
+Format the response as JSON with keys: story, quote, video, songs
+"""
+    try:
+        headers = {
+            "Authorization": f"Bearer {GROQ_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        data = {
+            "model": "llama3-8b-8192",
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.7
+        }
+        response = requests.post(GROQ_URL, headers=headers, json=data)
+        if response.status_code == 200:
+            content = response.json()['choices'][0]['message']['content']
+            import json
+            return json.loads(content)
+        else:
+            print(f"Groq API error: {response.status_code} - {response.text}")
+            return {
+                "story": "Unable to generate story.",
+                "quote": "Unable to generate quote.",
+                "video": "Unable to generate video suggestion.",
+                "songs": ["Unable to generate songs."]
+            }
+    except Exception as e:
+        print(f"LLM error: {e}")
+        return {
+            "story": "Unable to generate story.",
+            "quote": "Unable to generate quote.",
+            "video": "Unable to generate video suggestion.",
+            "songs": ["Unable to generate songs."]
+        }
+    """Sample frame sequences from video over time."""
     cap = cv2.VideoCapture(video_path)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-
-
-
-    if total_frames == 0:
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    duration = total_frames / fps if fps > 0 else 0
+    
+    if total_frames == 0 or duration == 0:
+        cap.release()
         return None
 
-    step = max(1, total_frames // NUM_FRAMES)
-    frames = []
-
-    for i in range(0, total_frames, step):
-        cap.set(cv2.CAP_PROP_POS_FRAMES, i)
-        ret, frame = cap.read()
-        if ret:
-            frame = cv2.resize(frame, TARGET_SIZE) / 255.0
-            frames.append(frame)
+    # Sample sequences every VIDEO_WINDOW_SIZE seconds
+    sequences = []
+    window_frames = int(VIDEO_WINDOW_SIZE * fps)
+    hop_frames = int(VIDEO_WINDOW_SIZE * fps / 2)  # overlap
+    
+    for start_frame in range(0, total_frames - window_frames + 1, hop_frames):
+        end_frame = start_frame + window_frames
+        frames = []
+        
+        for frame_idx in range(start_frame, end_frame, max(1, window_frames // NUM_FRAMES)):
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+            ret, frame = cap.read()
+            if ret:
+                frame = cv2.resize(frame, TARGET_SIZE) / 255.0
+                frames.append(frame)
+            if len(frames) == NUM_FRAMES:
+                break
+        
         if len(frames) == NUM_FRAMES:
-            break
-
+            sequences.append(np.array(frames))
+    
     cap.release()
-    return np.array(frames) if len(frames) == NUM_FRAMES else None
+    return np.array(sequences) if sequences else None
 
 @app.route('/')
 def index():
@@ -104,52 +215,71 @@ def process():
 
         # Process audio
         print("Extracting audio features...")
-        mfcc = extract_mfcc(audio_path)
-        if mfcc is None:
+        mfcc_windows = extract_mfcc(audio_path)
+        if mfcc_windows is None or len(mfcc_windows) == 0:
             os.remove(video_path)
             os.remove(audio_path)
             return jsonify({'error': 'Could not extract audio features'})
-        print(f"MFCC shape: {mfcc.shape}")
+        print(f"MFCC windows shape: {mfcc_windows.shape}")
 
         # Process video
         print("Extracting video features...")
-        frames = sample_frames(video_path)
-        if frames is None:
+        frame_sequences = sample_frames(video_path)
+        if frame_sequences is None or len(frame_sequences) == 0:
             os.remove(video_path)
             os.remove(audio_path)
             return jsonify({'error': 'Could not extract frames from video'})
 
-        print(f"Frames shape: {frames.shape}")
+        print(f"Frame sequences shape: {frame_sequences.shape}")
 
-        # Predict audio
-        print("Predicting audio...")
-        audio_pred = audio_model.predict(np.expand_dims(mfcc, axis=0), verbose=0)
-        audio_emotion_idx = np.argmax(audio_pred)
-        audio_emotion = EMOTIONS_7[audio_emotion_idx]
-        print(f"Audio emotion: {audio_emotion}")
+        # Predict audio temporal
+        print("Predicting audio temporal...")
+        audio_preds = []
+        for mfcc in mfcc_windows:
+            pred = audio_model.predict(np.expand_dims(mfcc, axis=0), verbose=0)[0]
+            audio_preds.append(pred)
+        audio_preds = np.array(audio_preds)
+        audio_emotions_temporal = [EMOTIONS_7[np.argmax(pred)] for pred in audio_preds]
 
-        # Predict video
-        print("Predicting video...")
-        frame_features = []
-        for frame in frames:
-            frame_exp = np.expand_dims(frame, axis=0)
-            feat = base_model(frame_exp)
-            feat = keras.layers.GlobalAveragePooling2D()(feat)
-            frame_features.append(feat.numpy().flatten())
-        video_feat = np.mean(frame_features, axis=0)
+        # Predict video temporal
+        print("Predicting video temporal...")
+        video_preds = []
+        for seq in frame_sequences:
+            frame_features = []
+            for frame in seq:
+                frame_exp = np.expand_dims(frame, axis=0)
+                feat = base_model(frame_exp)
+                feat = keras.layers.GlobalAveragePooling2D()(feat)
+                frame_features.append(feat.numpy().flatten())
+            video_feat = np.mean(frame_features, axis=0)
+            pred = video_model.predict(np.expand_dims(video_feat, axis=0), verbose=0)[0]
+            video_preds.append(pred)
+        video_preds = np.array(video_preds)
+        video_emotions_temporal = [EMOTIONS_7[np.argmax(pred)] for pred in video_preds]
 
-        video_pred = video_model.predict(np.expand_dims(video_feat, axis=0), verbose=0)
-        video_emotion_idx = np.argmax(video_pred)
-        video_emotion = EMOTIONS_7[video_emotion_idx]
-        print(f"Video emotion: {video_emotion}")
+        # Overall predictions (average)
+        audio_pred_avg = np.mean(audio_preds, axis=0)
+        video_pred_avg = np.mean(video_preds, axis=0)
+        audio_emotion = EMOTIONS_7[np.argmax(audio_pred_avg)]
+        video_emotion = EMOTIONS_7[np.argmax(video_pred_avg)]
 
         # Fuse predictions
         weight_audio = 0.35
         weight_video = 0.65
-        fused_pred = weight_audio * audio_pred + weight_video * video_pred
-        fused_emotion_idx = np.argmax(fused_pred)
-        fused_emotion = EMOTIONS_7[fused_emotion_idx]
+        fused_pred = weight_audio * audio_pred_avg + weight_video * video_pred_avg
+        fused_emotion = EMOTIONS_7[np.argmax(fused_pred)]
+
+        # Cognitive layer: Add reasoning
+        reasoning = cognitive_reasoning(audio_emotion, video_emotion, fused_emotion, audio_preds, video_preds)
+
+        # LLM layer: Generate content
+        llm_content = generate_llm_content(fused_emotion, reasoning, audio_emotions_temporal, video_emotions_temporal)
+
+        print(f"Audio emotion: {audio_emotion}")
+        print(f"Video emotion: {video_emotion}")
         print(f"Fused emotion: {fused_emotion}")
+        print(f"Reasoning: {reasoning}")
+        print(f"LLM content: {llm_content}")
 
         # Clean up
         os.remove(video_path)
@@ -159,7 +289,17 @@ def process():
         return jsonify({
             'audio_emotion': audio_emotion,
             'video_emotion': video_emotion,
-            'fused_emotion': fused_emotion
+            'fused_emotion': fused_emotion,
+            'reasoning': reasoning,
+            'story': llm_content.get('story', ''),
+            'quote': llm_content.get('quote', ''),
+            'video': llm_content.get('video', ''),
+            'songs': llm_content.get('songs', []),
+            'audio_temporal': audio_emotions_temporal,
+            'video_temporal': video_emotions_temporal,
+            'audio_probs_temporal': audio_preds.tolist(),
+            'video_probs_temporal': video_preds.tolist(),
+            'time_points': list(range(len(audio_emotions_temporal)))
         })
 
     except Exception as e:
@@ -171,4 +311,4 @@ def process():
         return jsonify({'error': str(e)})
 
 if __name__ == '__main__':
-    app.run(debug=False)
+    app.run(debug=True)

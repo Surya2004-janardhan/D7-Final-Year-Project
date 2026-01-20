@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Emotion Recognition Demo</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -71,6 +72,12 @@
         <div id="status"></div>
 
         <div id="results"></div>
+        
+        <div id="charts" style="display: none;">
+            <h3>Temporal Emotion Analysis</h3>
+            <canvas id="audioChart" width="400" height="200"></canvas>
+            <canvas id="videoChart" width="400" height="200"></canvas>
+        </div>
     </div>
 
     <script>
@@ -194,7 +201,15 @@
                         <div class="emotion-result">Audio Emotion: ${data.audio_emotion}</div>
                         <div class="emotion-result">Video Emotion: ${data.video_emotion}</div>
                         <div class="emotion-result"><strong>Fused Emotion: ${data.fused_emotion}</strong></div>
+                        <div class="emotion-result"><em>Reasoning: ${data.reasoning}</em></div>
+                        <h4>AI-Generated Content:</h4>
+                        <div class="emotion-result"><strong>Short Story:</strong> ${data.story}</div>
+                        <div class="emotion-result"><strong>Quote:</strong> ${data.quote}</div>
+                        <div class="emotion-result"><strong>YouTube Video:</strong> ${data.video}</div>
+                        <div class="emotion-result"><strong>Songs:</strong> ${data.songs.join(', ')}</div>
                     `;
+                    document.getElementById('charts').style.display = 'block';
+                    createCharts(data);
                 }
 
                 results.style.display = 'block';
@@ -209,6 +224,53 @@
                 recordBtn.textContent = 'Start Recording';
                 recordBtn.disabled = false;
             }
+        }
+
+        function createCharts(data) {
+            const emotions = ['neutral', 'happy', 'sad', 'angry', 'fearful', 'disgust', 'surprised'];
+            const colors = ['blue', 'green', 'gray', 'red', 'orange', 'purple', 'yellow'];
+
+            // Audio chart
+            const audioCtx = document.getElementById('audioChart').getContext('2d');
+            const audioData = emotions.map((emotion, idx) => ({
+                label: emotion,
+                data: data.audio_probs_temporal.map(probs => probs[idx]),
+                borderColor: colors[idx],
+                fill: false
+            }));
+
+            new Chart(audioCtx, {
+                type: 'line',
+                data: {
+                    labels: data.time_points,
+                    datasets: audioData
+                },
+                options: {
+                    title: { display: true, text: 'Audio Emotion Probabilities Over Time' },
+                    scales: { y: { beginAtZero: true, max: 1 } }
+                }
+            });
+
+            // Video chart
+            const videoCtx = document.getElementById('videoChart').getContext('2d');
+            const videoData = emotions.map((emotion, idx) => ({
+                label: emotion,
+                data: data.video_probs_temporal.map(probs => probs[idx]),
+                borderColor: colors[idx],
+                fill: false
+            }));
+
+            new Chart(videoCtx, {
+                type: 'line',
+                data: {
+                    labels: data.time_points,
+                    datasets: videoData
+                },
+                options: {
+                    title: { display: true, text: 'Video Emotion Probabilities Over Time' },
+                    scales: { y: { beginAtZero: true, max: 1 } }
+                }
+            });
         }
 
         // Initialize
