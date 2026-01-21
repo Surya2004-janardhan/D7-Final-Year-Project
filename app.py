@@ -27,7 +27,7 @@ except Exception as e:
     base_model = None
 
 # Initialize Groq client
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "your_groq_api_key_here")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "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")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 # Audio processing parameters
@@ -214,145 +214,71 @@ def index():
 @app.route('/process', methods=['POST'])
 def process():
     print("Processing request...")
-    if audio_model is None or video_model is None or base_model is None:
+    if video_model is None or base_model is None:
         print("Models not loaded")
         return jsonify({'error': 'Models not loaded'})
 
     try:
-        # Save uploaded files
+        # Save uploaded video file only
         video_file = request.files['video']
-        audio_file = request.files['audio']
-
         video_path = 'temp_video.webm'
-        audio_path = 'temp_audio.webm'
-        print(f"Saving files to {video_path} and {audio_path}")
-
+        print(f"Saving file to {video_path}")
         video_file.save(video_path)
-        audio_file.save(audio_path)
 
-        # Process audio
-        print("Extracting audio features...")
-        # Convert .webm audio to .wav for better compatibility
-        try:
-            audio_seg = AudioSegment.from_file(audio_path)
-            wav_path = 'temp_audio.wav'
-            audio_seg.export(wav_path, format='wav')
-            print(f"Converted audio to {wav_path}")
-        except Exception as e:
-            print(f"Failed to convert audio to wav: {e}")
-            print("Processing request...")
-            if video_model is None or base_model is None:
-                print("Models not loaded")
-                return jsonify({'error': 'Models not loaded'})
+        # Process video
+        print("Extracting video features...")
+        frame_sequences = sample_frames(video_path)
+        if frame_sequences is None or len(frame_sequences) == 0:
+            if os.path.exists(video_path):
+                try:
+                    os.remove(video_path)
+                except Exception as e:
+                    print(f"Failed to remove {video_path}: {e}")
+            return jsonify({'error': 'Could not extract frames from video'})
+        print(f"Frame sequences shape: {frame_sequences.shape}")
 
-            try:
-                # Save uploaded video file only
-                video_file = request.files['video']
-                video_path = 'temp_video.webm'
-                print(f"Saving file to {video_path}")
-                video_file.save(video_path)
-
-                # Process video
-                print("Extracting video features...")
-                frame_sequences = sample_frames(video_path)
-                if frame_sequences is None or len(frame_sequences) == 0:
-                    if os.path.exists(video_path):
-                        try:
-                            os.remove(video_path)
-                        except Exception as e:
-                            print(f"Failed to remove {video_path}: {e}")
-                    return jsonify({'error': 'Could not extract frames from video'})
-                print(f"Frame sequences shape: {frame_sequences.shape}")
-
-                # Predict video temporal
-                print("Predicting video temporal...")
-                video_preds = []
-                for seq in frame_sequences:
-                    frame_features = []
-                    for frame in seq:
-                        frame_exp = np.expand_dims(frame, axis=0)
-                        feat = base_model(frame_exp)
-                        feat = keras.layers.GlobalAveragePooling2D()(feat)
-                        frame_features.append(feat.numpy().flatten())
-                    video_feat = np.mean(frame_features, axis=0)
-                    pred = video_model.predict(np.expand_dims(video_feat, axis=0), verbose=0)[0]
-                    video_preds.append(pred)
-                video_preds = np.array(video_preds)
-                video_emotions_temporal = [EMOTIONS_7[np.argmax(pred)] for pred in video_preds]
-
-                # Overall predictions (average)
-                video_pred_avg = np.mean(video_preds, axis=0)
-                video_emotion = EMOTIONS_7[np.argmax(video_pred_avg)]
-
-                # Clean up
-                if os.path.exists(video_path):
-                    try:
-                        os.remove(video_path)
-                    except Exception as e:
-                        print(f"Failed to remove {video_path}: {e}")
-                print("Processing complete")
-
-                return jsonify({
-                    'audio_emotion': None,
-                    'video_emotion': video_emotion,
-                    'fused_emotion': video_emotion,
-                    'reasoning': f'Only video processed. Detected emotion: {video_emotion}',
-                    'story': '',
-                    'quote': '',
-                    'video': '',
-                    'songs': [],
-                    'audio_temporal': [],
-                    'video_temporal': video_emotions_temporal,
-                    'audio_probs_temporal': [],
-                    'video_probs_temporal': video_preds.tolist(),
-                    'time_points': list(range(len(video_emotions_temporal)))
-                })
+        # Predict video temporal
+        print("Predicting video temporal...")
+        video_preds = []
+        for seq in frame_sequences:
+            frame_features = []
+            for frame in seq:
+                frame_exp = np.expand_dims(frame, axis=0)
+                feat = base_model(frame_exp)
+                feat = keras.layers.GlobalAveragePooling2D()(feat)
+                frame_features.append(feat.numpy().flatten())
+            video_feat = np.mean(frame_features, axis=0)
+            pred = video_model.predict(np.expand_dims(video_feat, axis=0), verbose=0)[0]
+            video_preds.append(pred)
+        video_preds = np.array(video_preds)
+        video_emotions_temporal = [EMOTIONS_7[np.argmax(pred)] for pred in video_preds]
 
         # Overall predictions (average)
-        audio_pred_avg = np.mean(audio_preds, axis=0)
         video_pred_avg = np.mean(video_preds, axis=0)
-        audio_emotion = EMOTIONS_7[np.argmax(audio_pred_avg)]
         video_emotion = EMOTIONS_7[np.argmax(video_pred_avg)]
 
-        # Fuse predictions
-        weight_audio = 0.35
-        weight_video = 0.65
-        fused_pred = weight_audio * audio_pred_avg + weight_video * video_pred_avg
-        fused_emotion = EMOTIONS_7[np.argmax(fused_pred)]
-
-        # Cognitive layer: Add reasoning
-        reasoning = cognitive_reasoning(audio_emotion, video_emotion, fused_emotion, audio_preds, video_preds)
-
-        # LLM layer: Generate content
-        llm_content = generate_llm_content(fused_emotion, reasoning, audio_emotions_temporal, video_emotions_temporal)
-
-        print(f"Audio emotion: {audio_emotion}")
-        print(f"Video emotion: {video_emotion}")
-        print(f"Fused emotion: {fused_emotion}")
-        print(f"Reasoning: {reasoning}")
-        print(f"LLM content: {llm_content}")
-
-
         # Clean up
-        for path in [video_path, audio_path, wav_path]:
-            if os.path.exists(path):
-                os.remove(path)
+        if os.path.exists(video_path):
+            try:
+                os.remove(video_path)
+            except Exception as e:
+                print(f"Failed to remove {video_path}: {e}")
         print("Processing complete")
 
         return jsonify({
-            'audio_emotion': audio_emotion,
+            'audio_emotion': None,
             'video_emotion': video_emotion,
-            'fused_emotion': fused_emotion,
-            'reasoning': reasoning,
-            'story': llm_content.get('story', ''),
-            'quote': llm_content.get('quote', ''),
-            'video': llm_content.get('video', ''),
-            'songs': llm_content.get('songs', []),
-            'audio_temporal': audio_emotions_temporal,
+            'fused_emotion': video_emotion,
+            'reasoning': f'Only video processed. Detected emotion: {video_emotion}',
+            'story': '',
+            'quote': '',
+            'video': '',
+            'songs': [],
+            'audio_temporal': [],
             'video_temporal': video_emotions_temporal,
-            'audio_probs_temporal': audio_preds.tolist(),
+            'audio_probs_temporal': [],
             'video_probs_temporal': video_preds.tolist(),
-            'time_points': list(range(len(audio_emotions_temporal)))
+            'time_points': list(range(len(video_emotions_temporal)))
         })
 
     except Exception as e:
