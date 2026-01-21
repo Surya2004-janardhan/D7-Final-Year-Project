@@ -1,30 +1,16 @@
 from flask import Flask, render_template, request, jsonify
-import os
 import cv2
 import numpy as np
 import librosa
 from tensorflow import keras
 import requests
 from pydub import AudioSegment
+import os
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB limit for uploads
-
 # Emotion labels
-EMOTIONS_7 = ['neutral', 'happy', 'sad', 'angry', 'fearful', 'disgust', 'surprised']
-
-# MFCC parameters
-SR = 22050
-N_MFCC = 13
-HOP_LENGTH = 512
-N_FRAMES = 300
-WINDOW_SIZE = 1.0  # seconds
-HOP_SIZE = 0.5  # seconds
-
-# Video parameters
-NUM_FRAMES = 16
-TARGET_SIZE = (112, 112)
-VIDEO_WINDOW_SIZE = 2.0  # seconds for video sequences
+EMOTIONS_7 = ['angry', 'disgust', 'fearful', 'happy', 'neutral', 'sad', 'surprised']
 
 # Load models once at startup
 print("Loading models...")
@@ -43,6 +29,18 @@ except Exception as e:
 # Initialize Groq client
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "your_groq_api_key_here")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+
+# Audio processing parameters
+SR = 16000
+WINDOW_SIZE = 0.025
+HOP_SIZE = 0.01
+N_MFCC = 13
+HOP_LENGTH = 512
+
+# Video processing parameters
+VIDEO_WINDOW_SIZE = 1  # seconds
+TARGET_SIZE = (112, 112)
+NUM_FRAMES = 10
 
 def extract_mfcc(audio_path):
     """Extract MFCC features from audio file in windows."""
@@ -173,6 +171,8 @@ Format the response as JSON with keys: story, quote, video, songs
             "video": "Unable to generate video suggestion.",
             "songs": ["Unable to generate songs."]
         }
+
+def sample_frames(video_path):
     """Sample frame sequences from video over time."""
     cap = cv2.VideoCapture(video_path)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -232,47 +232,81 @@ def process():
 
         # Process audio
         print("Extracting audio features...")
-        mfcc_windows = extract_mfcc(audio_path)
-        if mfcc_windows is None or len(mfcc_windows) == 0:
-            os.remove(video_path)
-            os.remove(audio_path)
-            return jsonify({'error': 'Could not extract audio features'})
-        print(f"MFCC windows shape: {mfcc_windows.shape}")
+        # Convert .webm audio to .wav for better compatibility
+        try:
+            audio_seg = AudioSegment.from_file(audio_path)
+            wav_path = 'temp_audio.wav'
+            audio_seg.export(wav_path, format='wav')
+            print(f"Converted audio to {wav_path}")
+        except Exception as e:
+            print(f"Failed to convert audio to wav: {e}")
+            print("Processing request...")
+            if video_model is None or base_model is None:
+                print("Models not loaded")
+                return jsonify({'error': 'Models not loaded'})
 
-        # Process video
-        print("Extracting video features...")
-        frame_sequences = sample_frames(video_path)
-        if frame_sequences is None or len(frame_sequences) == 0:
-            os.remove(video_path)
-            os.remove(audio_path)
-            return jsonify({'error': 'Could not extract frames from video'})
+            try:
+                # Save uploaded video file only
+                video_file = request.files['video']
+                video_path = 'temp_video.webm'
+                print(f"Saving file to {video_path}")
+                video_file.save(video_path)
 
-        print(f"Frame sequences shape: {frame_sequences.shape}")
+                # Process video
+                print("Extracting video features...")
+                frame_sequences = sample_frames(video_path)
+                if frame_sequences is None or len(frame_sequences) == 0:
+                    if os.path.exists(video_path):
+                        try:
+                            os.remove(video_path)
+                        except Exception as e:
+                            print(f"Failed to remove {video_path}: {e}")
+                    return jsonify({'error': 'Could not extract frames from video'})
+                print(f"Frame sequences shape: {frame_sequences.shape}")
 
-        # Predict audio temporal
-        print("Predicting audio temporal...")
-        audio_preds = []
-        for mfcc in mfcc_windows:
-            pred = audio_model.predict(np.expand_dims(mfcc, axis=0), verbose=0)[0]
-            audio_preds.append(pred)
-        audio_preds = np.array(audio_preds)
-        audio_emotions_temporal = [EMOTIONS_7[np.argmax(pred)] for pred in audio_preds]
+                # Predict video temporal
+                print("Predicting video temporal...")
+                video_preds = []
+                for seq in frame_sequences:
+                    frame_features = []
+                    for frame in seq:
+                        frame_exp = np.expand_dims(frame, axis=0)
+                        feat = base_model(frame_exp)
+                        feat = keras.layers.GlobalAveragePooling2D()(feat)
+                        frame_features.append(feat.numpy().flatten())
+                    video_feat = np.mean(frame_features, axis=0)
+                    pred = video_model.predict(np.expand_dims(video_feat, axis=0), verbose=0)[0]
+                    video_preds.append(pred)
+                video_preds = np.array(video_preds)
+                video_emotions_temporal = [EMOTIONS_7[np.argmax(pred)] for pred in video_preds]
 
-        # Predict video temporal
-        print("Predicting video temporal...")
-        video_preds = []
-        for seq in frame_sequences:
-            frame_features = []
-            for frame in seq:
-                frame_exp = np.expand_dims(frame, axis=0)
-                feat = base_model(frame_exp)
-                feat = keras.layers.GlobalAveragePooling2D()(feat)
-                frame_features.append(feat.numpy().flatten())
-            video_feat = np.mean(frame_features, axis=0)
-            pred = video_model.predict(np.expand_dims(video_feat, axis=0), verbose=0)[0]
-            video_preds.append(pred)
-        video_preds = np.array(video_preds)
-        video_emotions_temporal = [EMOTIONS_7[np.argmax(pred)] for pred in video_preds]
+                # Overall predictions (average)
+                video_pred_avg = np.mean(video_preds, axis=0)
+                video_emotion = EMOTIONS_7[np.argmax(video_pred_avg)]
+
+                # Clean up
+                if os.path.exists(video_path):
+                    try:
+                        os.remove(video_path)
+                    except Exception as e:
+                        print(f"Failed to remove {video_path}: {e}")
+                print("Processing complete")
+
+                return jsonify({
+                    'audio_emotion': None,
+                    'video_emotion': video_emotion,
+                    'fused_emotion': video_emotion,
+                    'reasoning': f'Only video processed. Detected emotion: {video_emotion}',
+                    'story': '',
+                    'quote': '',
+                    'video': '',
+                    'songs': [],
+                    'audio_temporal': [],
+                    'video_temporal': video_emotions_temporal,
+                    'audio_probs_temporal': [],
+                    'video_probs_temporal': video_preds.tolist(),
+                    'time_points': list(range(len(video_emotions_temporal)))
+                })
 
         # Overall predictions (average)
         audio_pred_avg = np.mean(audio_preds, axis=0)
@@ -298,9 +332,11 @@ def process():
         print(f"Reasoning: {reasoning}")
         print(f"LLM content: {llm_content}")
 
+
         # Clean up
-        os.remove(video_path)
-        os.remove(audio_path)
+        for path in [video_path, audio_path, wav_path]:
+            if os.path.exists(path):
+                os.remove(path)
         print("Processing complete")
 
         return jsonify({
@@ -320,12 +356,17 @@ def process():
         })
 
     except Exception as e:
-        print(f"Error during processing: {e}")
+        import traceback
+        tb = traceback.format_exc()
+        print(f"Error during processing: {e}\n{tb}")
         # Clean up on error
-        for path in ['temp_video.webm', 'temp_audio.webm']:
+        for path in ['temp_video.webm']:
             if os.path.exists(path):
-                os.remove(path)
-        return jsonify({'error': str(e)})
+                try:
+                    os.remove(path)
+                except Exception as ex:
+                    print(f"Failed to remove {path}: {ex}")
+        return jsonify({'error': f'{e}\n{tb}'})
 
 if __name__ == '__main__':
     app.run(debug=True)
