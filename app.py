@@ -5,6 +5,7 @@ import numpy as np
 import librosa
 from tensorflow import keras
 import requests
+from pydub import AudioSegment
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB limit for uploads
@@ -46,7 +47,23 @@ GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 def extract_mfcc(audio_path):
     """Extract MFCC features from audio file in windows."""
     try:
-        y, sr = librosa.load(audio_path, sr=SR)
+        # Load audio using pydub (handles WebM better than librosa)
+        audio = AudioSegment.from_file(audio_path)
+        
+        # Convert to mono and get raw samples
+        audio = audio.set_channels(1)  # Convert to mono
+        samples = np.array(audio.get_array_of_samples(), dtype=np.float32)
+        
+        # Normalize to [-1, 1] range
+        samples = samples / (2**(audio.sample_width*8-1))
+        
+        # Resample if needed
+        if audio.frame_rate != SR:
+            samples = librosa.resample(samples, orig_sr=audio.frame_rate, target_sr=SR)
+        
+        y = samples
+        sr = SR
+        
         if len(y) == 0:
             raise ValueError("Empty audio")
         
