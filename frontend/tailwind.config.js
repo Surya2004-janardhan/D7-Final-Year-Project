@@ -39,4 +39,10 @@ export default {
     },
   },
   plugins: [],
+  corePlugins: {
+    preflight: false,
+  },
+  future: {
+    hoverOnlyWhenSupported: true,
+  },
 };
