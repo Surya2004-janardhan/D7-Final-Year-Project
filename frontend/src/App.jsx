@@ -14,6 +14,7 @@ import {
   Zap,
   TrendingUp,
   Activity,
+  Smile,
 } from "lucide-react";
 import { Line } from "react-chartjs-2";
 import {
@@ -228,7 +229,7 @@ function App() {
         {/* Header */}
         <header className="text-center mb-16">
           <div className="flex items-center justify-center mb-4">
-            <Sparkles className="w-10 h-10 text-accent-orange icon-sparkle mr-3" />
+            <Smile className="w-10 h-10 text-accent-orange icon-smile mr-3" />
             <h1 className="text-6xl font-black tracking-tight gradient-text">
               EmotionAI
             </h1>
