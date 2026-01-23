@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    @apply scroll-smooth;
+  }
+}
+
+@layer components {
+  .glass {
+    @apply bg-white/10 backdrop-blur-md border border-white/20;
+  }
+
+  .glass-dark {
+    @apply bg-black/10 backdrop-blur-md border border-white/10;
+  }
+
+  .btn-primary {
+    @apply bg-violet-600 hover:bg-violet-700 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl;
+  }
+
+  .btn-secondary {
+    @apply bg-violet-500/20 hover:bg-violet-500/30 text-violet-200 font-semibold py-2 px-4 rounded-lg transition-all duration-300 border border-violet-400/30;
+  }
+
+  .card {
+    @apply glass rounded-xl p-6 shadow-2xl;
+  }
+
+  .input-file {
+    @apply file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100;
+  }
+}
