@@ -14,7 +14,6 @@ import {
   Zap,
   TrendingUp,
   Activity,
-  Smile,
 } from "lucide-react";
 import { Line } from "react-chartjs-2";
 import {
@@ -225,17 +224,17 @@ function App() {
         <div className="orb orb-3"></div>
       </div>
 
-      <div className="container mx-auto px-4 py-12 relative z-10">
+      <div className="max-w-7xl mx-auto px-8 py-12 relative z-10">
         {/* Header */}
         <header className="text-center mb-16">
           <div className="flex items-center justify-center mb-4">
-            <Smile className="w-10 h-10 text-accent-orange icon-smile mr-3" />
+            <Sparkles className="w-10 h-10 text-accent-orange icon-sparkle mr-3" />
             <h1 className="text-6xl font-black tracking-tight gradient-text">
               EmotionAI
             </h1>
             <Sparkles className="w-10 h-10 text-accent-cyan icon-sparkle ml-3" />
           </div>
-          <p className="text-xl text-text-muted max-w-2xl mx-auto">
+          <p className="text-xl text-text-muted max-w-2xl mx-auto text-center">
             Advanced multimodal emotion recognition powered by deep learning
           </p>
           <div className="flex items-center justify-center gap-2 mt-4">

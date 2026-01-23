@@ -284,34 +284,36 @@ def index():
 
 @app.route('/process', methods=['POST'])
 def process():
-    print("Processing request...")
+    print("=" * 50)
+    print("STARTING EMOTION ANALYSIS PROCESS")
+    print("=" * 50)
+
     if video_model is None or base_model is None:
-        print("Models not loaded")
+        print("ERROR: Models not loaded")
         return jsonify({'error': 'Models not loaded'})
 
     try:
-        # Save uploaded video file only
+        # Save uploaded video file
         video_file = request.files['video']
         video_path = 'temp_video.webm'
-        print(f"Saving file to {video_path}")
+        print(f"Saving video file to {video_path}")
         video_file.save(video_path)
 
-        # Process video
+        # Process video and get temporal predictions
         print("Extracting video features...")
         frame_sequences = sample_frames(video_path)
         if frame_sequences is None or len(frame_sequences) == 0:
+            print("ERROR: Could not extract frames from video")
             if os.path.exists(video_path):
-                try:
-                    os.remove(video_path)
-                except Exception as e:
-                    print(f"Failed to remove {video_path}: {e}")
+                os.remove(video_path)
             return jsonify({'error': 'Could not extract frames from video'})
+
         print(f"Frame sequences shape: {frame_sequences.shape}")
 
-        # Predict video temporal
-        print("Predicting video temporal...")
+        # Get video temporal predictions
+        print("Analyzing video temporal patterns...")
         video_preds = []
-        for seq in frame_sequences:
+        for i, seq in enumerate(frame_sequences):
             frame_features = []
             for frame in seq:
                 frame_exp = np.expand_dims(frame, axis=0)
@@ -321,41 +323,161 @@ def process():
             video_feat = np.mean(frame_features, axis=0)
             pred = video_model.predict(np.expand_dims(video_feat, axis=0), verbose=0)[0]
             video_preds.append(pred)
+            if i % 5 == 0:  # Log progress every 5 frames
+                print(f"Processed video frame sequence {i+1}/{len(frame_sequences)}")
+
         video_preds = np.array(video_preds)
         video_emotions_temporal = [EMOTIONS_7[np.argmax(pred)] for pred in video_preds]
 
-        # Overall predictions (average)
-        video_pred_avg = np.mean(video_preds, axis=0)
-        video_emotion = EMOTIONS_7[np.argmax(video_pred_avg)]
+        print(f"Video temporal analysis complete. Total sequences: {len(video_emotions_temporal)}")
+        print(f"Video emotion timeline: {video_emotions_temporal}")
+
+        # TIMELINE-BASED EMOTION DETERMINATION
+        print("\n" + "=" * 30)
+        print("TIMELINE ANALYSIS & FINAL EMOTION DETERMINATION")
+        print("=" * 30)
+
+        # Analyze timeline patterns to determine dominant emotion
+        from collections import Counter
+        emotion_counts = Counter(video_emotions_temporal)
+        total_predictions = len(video_emotions_temporal)
+
+        print(f"Emotion distribution in timeline:")
+        for emotion, count in emotion_counts.items():
+            percentage = (count / total_predictions) * 100
+            print(f"  {emotion}: {count} times ({percentage:.1f}%)")
+
+        # Determine final emotion based on timeline majority
+        timeline_dominant_emotion = emotion_counts.most_common(1)[0][0]
+        timeline_confidence = emotion_counts.most_common(1)[0][1] / total_predictions
+
+        print(f"\nTimeline-based dominant emotion: {timeline_dominant_emotion}")
+        print(f"Timeline confidence: {timeline_confidence:.2f}")
+
+        # Calculate emotional stability (consistency)
+        unique_emotions = len(emotion_counts)
+        emotional_stability = 1.0 - (unique_emotions - 1) / len(EMOTIONS_7)  # Normalized stability
+        print(f"Emotional stability: {emotional_stability:.2f}")
+
+        # Analyze emotional transitions
+        transitions = sum(1 for i in range(1, len(video_emotions_temporal))
+                         if video_emotions_temporal[i] != video_emotions_temporal[i-1])
+        transition_rate = transitions / max(1, len(video_emotions_temporal) - 1)
+        print(f"Emotional transitions: {transitions} changes, rate: {transition_rate:.2f}")
+
+        # COGNITIVE LAYER ANALYSIS
+        print("\n" + "=" * 20)
+        print("COGNITIVE LAYER ANALYSIS")
+        print("=" * 20)
+
+        # Enhanced cognitive reasoning based on timeline analysis
+        reasoning_parts = []
+
+        # Timeline dominance analysis
+        if timeline_confidence > 0.7:
+            reasoning_parts.append(f"Strong emotional consistency detected: {timeline_dominant_emotion} appears in {timeline_confidence:.1f} of all analyzed moments, indicating a clear and stable emotional state.")
+        elif timeline_confidence > 0.5:
+            reasoning_parts.append(f"Moderate emotional presence: {timeline_dominant_emotion} is the most frequent emotion ({timeline_confidence:.1f} prevalence), though with some variation.")
+        else:
+            reasoning_parts.append(f"Mixed emotional state: No single emotion dominates the timeline (highest is {timeline_dominant_emotion} at {timeline_confidence:.1f}), suggesting emotional complexity or fluctuation.")
+
+        # Stability analysis
+        if emotional_stability > 0.8:
+            reasoning_parts.append("High emotional stability observed throughout the recording, suggesting consistent emotional expression.")
+        elif emotional_stability > 0.6:
+            reasoning_parts.append("Moderate emotional stability with some variation, indicating natural emotional responses.")
+        else:
+            reasoning_parts.append("Low emotional stability detected, suggesting emotional volatility or complex emotional experiences.")
+
+        # Transition analysis
+        if transition_rate > 0.3:
+            reasoning_parts.append("Frequent emotional transitions detected, which may indicate emotional responsiveness or changing circumstances.")
+        elif transition_rate < 0.1:
+            reasoning_parts.append("Stable emotional state with minimal transitions, suggesting emotional consistency.")
+
+        # Pattern recognition
+        if len(video_emotions_temporal) >= 3:
+            # Check for emotional arcs
+            first_third = video_emotions_temporal[:len(video_emotions_temporal)//3]
+            middle_third = video_emotions_temporal[len(video_emotions_temporal)//3:2*len(video_emotions_temporal)//3]
+            last_third = video_emotions_temporal[2*len(video_emotions_temporal)//3:]
+
+            first_dominant = Counter(first_third).most_common(1)[0][0]
+            middle_dominant = Counter(middle_third).most_common(1)[0][0]
+            last_dominant = Counter(last_third).most_common(1)[0][0]
+
+            if first_dominant != last_dominant:
+                reasoning_parts.append(f"Emotional arc detected: Started with {first_dominant}, moved through {middle_dominant}, and ended with {last_dominant}, suggesting an emotional journey.")
+
+        # Intensity analysis based on prediction confidence
+        avg_confidence = np.mean([np.max(pred) for pred in video_preds])
+        if avg_confidence > 0.8:
+            reasoning_parts.append("High emotional intensity detected, suggesting strong emotional expression.")
+        elif avg_confidence > 0.6:
+            reasoning_parts.append("Moderate emotional intensity observed.")
+        else:
+            reasoning_parts.append("Subtle emotional expressions detected.")
+
+        cognitive_reasoning = " ".join(reasoning_parts)
+        print(f"Cognitive analysis complete: {len(reasoning_parts)} insights generated")
+
+        # AI LAYER - LLM CONTENT GENERATION
+        print("\n" + "=" * 15)
+        print("AI LAYER - CONTENT GENERATION")
+        print("=" * 15)
+
+        # Generate LLM content based on timeline analysis
+        llm_content = generate_llm_content(
+            timeline_dominant_emotion,
+            cognitive_reasoning,
+            video_emotions_temporal,  # Audio timeline (empty for now)
+            video_emotions_temporal   # Video timeline
+        )
+
+        print("AI content generation complete")
+
+        # FINAL RESULT COMPILATION
+        print("\n" + "=" * 10)
+        print("FINAL RESULT COMPILATION")
+        print("=" * 10)
+
+        final_result = {
+            'audio_emotion': None,  # No audio processing currently
+            'video_emotion': timeline_dominant_emotion,
+            'fused_emotion': timeline_dominant_emotion,  # Based on timeline analysis
+            'reasoning': cognitive_reasoning,
+            'story': llm_content.get('story', ''),
+            'quote': llm_content.get('quote', ''),
+            'video': llm_content.get('video', ''),
+            'songs': llm_content.get('songs', []),
+            'audio_temporal': [],  # Empty for now
+            'video_temporal': video_emotions_temporal,
+            'audio_probs_temporal': [],  # Empty for now
+            'video_probs_temporal': video_preds.tolist(),
+            'time_points': list(range(len(video_emotions_temporal))),
+            'timeline_confidence': float(timeline_confidence),
+            'emotional_stability': float(emotional_stability),
+            'transition_rate': float(transition_rate),
+            'emotion_distribution': dict(emotion_counts)
+        }
+
+        print(f"Final emotion determination: {timeline_dominant_emotion}")
+        print(f"Timeline confidence: {timeline_confidence:.2f}")
+        print(f"Processing complete successfully")
+        print("=" * 50)
 
         # Clean up
         if os.path.exists(video_path):
-            try:
-                os.remove(video_path)
-            except Exception as e:
-                print(f"Failed to remove {video_path}: {e}")
-        print("Processing complete")
+            os.remove(video_path)
 
-        return jsonify({
-            'audio_emotion': None,
-            'video_emotion': video_emotion,
-            'fused_emotion': video_emotion,
-            'reasoning': f'Only video processed. Detected emotion: {video_emotion}',
-            'story': '',
-            'quote': '',
-            'video': '',
-            'songs': [],
-            'audio_temporal': [],
-            'video_temporal': video_emotions_temporal,
-            'audio_probs_temporal': [],
-            'video_probs_temporal': video_preds.tolist(),
-            'time_points': list(range(len(video_emotions_temporal)))
-        })
+        return jsonify(final_result)
 
     except Exception as e:
         import traceback
         tb = traceback.format_exc()
-        print(f"Error during processing: {e}\n{tb}")
+        print(f"ERROR during processing: {e}")
+        print(f"Traceback: {tb}")
+
         # Clean up on error
         for path in ['temp_video.webm']:
             if os.path.exists(path):
@@ -363,7 +485,8 @@ def process():
                     os.remove(path)
                 except Exception as ex:
                     print(f"Failed to remove {path}: {ex}")
-        return jsonify({'error': f'{e}\n{tb}'})
+
+        return jsonify({'error': f'Processing failed: {str(e)}'})
 
 if __name__ == '__main__':
     app.run(debug=True)
