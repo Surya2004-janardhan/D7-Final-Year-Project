@@ -53,17 +53,6 @@ body {
   overflow-x: hidden;
 }
 
-.container {
-  padding-left: 2rem;
-  padding-right: 2rem;
-}
-
-@media (max-width: 768px) {
-  .container {
-    padding-left: 1rem;
-    padding-right: 1rem;
-  }
-}
 /* ========================================
    BACKGROUND GRADIENT MESH
    ======================================== */
