@@ -27,7 +27,10 @@ except Exception as e:
     base_model = None
 
 # Initialize Groq client
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "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")
+# below trying to set env of groq
+# GROQ_API_KEY 
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+print("Groq client initialized", os.getenv("GROQ_API_KEY"))
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 # Audio processing parameters
@@ -168,7 +171,7 @@ Ensure the content is empathetic, supportive, and directly addresses the detecte
             "Content-Type": "application/json"
         }
         data = {
-            "model": "llama3-8b-8192",
+            "model": "llama-3.3-70b-versatile",
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.8,
             "max_tokens": 1000

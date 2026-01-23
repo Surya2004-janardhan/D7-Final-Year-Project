@@ -10,6 +10,10 @@ import {
   Music,
   BookOpen,
   Youtube,
+  Sparkles,
+  Zap,
+  TrendingUp,
+  Activity,
 } from "lucide-react";
 import { Line } from "react-chartjs-2";
 import {
@@ -104,12 +108,7 @@ function App() {
   const processVideo = async (videoBlob) => {
     setIsProcessing(true);
     const formData = new FormData();
-
-    // For uploaded files, we need to extract audio and video separately
-    // For simplicity, we'll send the video and let backend handle extraction
     formData.append("video", videoBlob, "video.webm");
-
-    // Create a dummy audio blob for now (backend will extract from video)
     const audioBlob = new Blob([], { type: "audio/webm" });
     formData.append("audio", audioBlob, "audio.webm");
 
@@ -130,15 +129,39 @@ function App() {
 
   const chartOptions = {
     responsive: true,
+    maintainAspectRatio: true,
     plugins: {
       legend: {
         position: "top",
+        labels: {
+          color: "#e0e7ff",
+          font: {
+            size: 11,
+            weight: "500",
+          },
+          padding: 12,
+          usePointStyle: true,
+          pointStyle: "circle",
+        },
       },
       title: {
         display: true,
         text: "Emotion Probabilities Over Time",
+        color: "#fff",
+        font: {
+          size: 16,
+          weight: "600",
+        },
+        padding: 20,
       },
       tooltip: {
+        backgroundColor: "rgba(15, 23, 42, 0.95)",
+        titleColor: "#fff",
+        bodyColor: "#e0e7ff",
+        borderColor: "rgba(255, 107, 0, 0.3)",
+        borderWidth: 1,
+        padding: 12,
+        displayColors: true,
         callbacks: {
           label: function (context) {
             return `${context.dataset.label}: ${context.parsed.y.toFixed(3)}`;
@@ -150,6 +173,28 @@ function App() {
       y: {
         beginAtZero: true,
         max: 1,
+        grid: {
+          color: "rgba(255, 255, 255, 0.1)",
+          drawBorder: false,
+        },
+        ticks: {
+          color: "#e0e7ff",
+          font: {
+            size: 11,
+          },
+        },
+      },
+      x: {
+        grid: {
+          color: "rgba(255, 255, 255, 0.05)",
+          drawBorder: false,
+        },
+        ticks: {
+          color: "#e0e7ff",
+          font: {
+            size: 11,
+          },
+        },
       },
     },
   };
@@ -159,120 +204,172 @@ function App() {
     datasets: emotions.map((emotion, idx) => ({
       label: emotion,
       data: probs.map((p) => p[idx]),
-      borderColor: `hsl(${(idx * 360) / emotions.length}, 70%, 50%)`,
-      backgroundColor: `hsl(${(idx * 360) / emotions.length}, 70%, 50%, 0.1)`,
-      tension: 0.1,
+      borderColor: `hsl(${(idx * 360) / emotions.length}, 85%, 65%)`,
+      backgroundColor: `hsl(${(idx * 360) / emotions.length}, 85%, 65%, 0.15)`,
+      borderWidth: 2,
+      tension: 0.4,
+      pointRadius: 3,
+      pointHoverRadius: 5,
+      pointBackgroundColor: `hsl(${(idx * 360) / emotions.length}, 85%, 65%)`,
+      pointBorderColor: "#0f172a",
+      pointBorderWidth: 2,
     })),
   });
 
   return (
-    <div
-      className="min-h-screen"
-      style={{
-        background: "linear-gradient(135deg, #51e2f5, #9df9ef, #edf756)",
-      }}
-    >
-      <div className="container mx-auto px-4 py-8">
-        <header className="text-center mb-12">
-          <h1
-            className="text-5xl font-bold mb-4"
-            style={{
-              background: "linear-gradient(135deg, #51e2f5, #9df9ef)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              backgroundClip: "text",
-            }}
-          >
-            Emotion Recognition AI
-          </h1>
-          <p className="text-xl" style={{ color: "#a28089" }}>
-            Discover your emotions through AI-powered analysis of facial
-            expressions and voice patterns
+    <div className="min-h-screen bg-gradient-mesh">
+      <div className="floating-orbs">
+        <div className="orb orb-1"></div>
+        <div className="orb orb-2"></div>
+        <div className="orb orb-3"></div>
+      </div>
+
+      <div className="container mx-auto px-4 py-12 relative z-10">
+        {/* Header */}
+        <header className="text-center mb-16">
+          <div className="flex items-center justify-center mb-4">
+            <Sparkles className="w-10 h-10 text-accent-orange icon-sparkle mr-3" />
+            <h1 className="text-6xl font-black tracking-tight gradient-text">
+              EmotionAI
+            </h1>
+            <Sparkles className="w-10 h-10 text-accent-cyan icon-sparkle ml-3" />
+          </div>
+          <p className="text-xl text-text-muted max-w-2xl mx-auto">
+            Advanced multimodal emotion recognition powered by deep learning
           </p>
+          <div className="flex items-center justify-center gap-2 mt-4">
+            <div className="status-badge">
+              <Activity className="w-4 h-4 icon-pulse" />
+              <span>Live Analysis</span>
+            </div>
+            <div className="status-badge">
+              <Zap className="w-4 h-4 icon-zap" />
+              <span>AI Powered</span>
+            </div>
+          </div>
         </header>
 
-        <div className="flex gap-8 mb-12">
-          {/* Upload Section - Takes up 3/4 of the space */}
-          <div className="flex-1">
-            <div className="card">
-              <div className="flex items-center mb-6">
-                <Upload
-                  className="w-8 h-8 icon-float mr-3"
-                  style={{ color: "#51e2f5" }}
-                />
-                <h2
-                  className="text-2xl font-semibold"
-                  style={{ color: "#a28089" }}
-                >
-                  Upload Video
-                </h2>
+        {/* Main Content Grid */}
+        <div className="grid lg:grid-cols-3 gap-6 mb-8">
+          {/* Upload Section - 2 columns */}
+          <div className="lg:col-span-2">
+            <div className="glass-card">
+              <div className="card-header">
+                <div className="flex items-center gap-3">
+                  <div className="icon-wrapper">
+                    <Upload className="w-6 h-6 icon-float" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-white">
+                    Upload & Analyze
+                  </h2>
+                </div>
+                <TrendingUp className="w-5 h-5 text-accent-cyan icon-trend" />
               </div>
+
               <div className="upload-zone">
-                <input
-                  type="file"
-                  accept="video/*"
-                  onChange={handleFileUpload}
-                  className="input-file w-full mb-4"
-                />
-                <button
-                  onClick={processUploadedVideo}
-                  disabled={!uploadedFile || isProcessing}
-                  className="btn-primary w-full flex items-center justify-center"
-                >
-                  {isProcessing ? (
-                    <Loader2 className="w-5 h-5 animate-spin mr-2 icon-pulse" />
-                  ) : (
-                    <Play className="w-5 h-5 mr-2 icon-bounce" />
+                <div className="upload-zone-inner">
+                  <Video className="w-16 h-16 text-accent-orange mb-4 mx-auto icon-float" />
+                  <h3 className="text-lg font-semibold text-white mb-2">
+                    Drop your video here
+                  </h3>
+                  <p className="text-sm text-text-muted mb-4">
+                    or click to browse files
+                  </p>
+                  <input
+                    type="file"
+                    accept="video/*"
+                    onChange={handleFileUpload}
+                    className="file-input"
+                    id="file-upload"
+                  />
+                  <label htmlFor="file-upload" className="file-label">
+                    Choose File
+                  </label>
+                  {uploadedFile && (
+                    <div className="mt-4 text-sm text-accent-cyan">
+                      ✓ {uploadedFile.name}
+                    </div>
                   )}
-                  Analyze Video
-                </button>
+                </div>
               </div>
-              <p className="text-sm mt-4" style={{ color: "#a28089" }}>
-                Upload a video file for emotion analysis. Results may vary based
-                on camera clarity, lighting, facial expressions, and audio
-                surroundings.
-              </p>
+
+              <button
+                onClick={processUploadedVideo}
+                disabled={!uploadedFile || isProcessing}
+                className="btn-primary w-full mt-6"
+              >
+                {isProcessing ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin icon-pulse" />
+                    <span>Analyzing...</span>
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-5 h-5 icon-bounce" />
+                    <span>Start Analysis</span>
+                  </>
+                )}
+              </button>
+
+              <div className="info-box mt-4">
+                <Sparkles className="w-4 h-4 text-accent-cyan" />
+                <p className="text-xs text-text-muted">
+                  Supports MP4, WebM, AVI formats • Max 100MB • Best with clear
+                  facial expressions
+                </p>
+              </div>
             </div>
           </div>
 
-          {/* Live Recording Section - Small sidebar */}
-          <div className="w-80">
-            <div className="card recording-small">
-              <div className="flex items-center mb-6">
-                <Video
-                  className="w-6 h-6 icon-wiggle mr-2"
-                  style={{ color: "#ffa8B6" }}
-                />
-                <h2
-                  className="text-lg font-semibold"
-                  style={{ color: "#a28089" }}
-                >
-                  Quick Record
-                </h2>
+          {/* Live Recording Section - 1 column */}
+          <div className="lg:col-span-1">
+            <div className="glass-card h-full">
+              <div className="card-header">
+                <div className="flex items-center gap-3">
+                  <div className="icon-wrapper">
+                    <Video className="w-5 h-5 icon-wiggle" />
+                  </div>
+                  <h2 className="text-xl font-bold text-white">Live Record</h2>
+                </div>
+                {isRecording && (
+                  <div className="recording-indicator">
+                    <div className="recording-dot"></div>
+                    <span>REC</span>
+                  </div>
+                )}
               </div>
-              <div className="space-y-3">
-                <video
-                  ref={videoRef}
-                  className="w-full h-32 bg-black rounded-lg"
-                  autoPlay
-                  muted
-                />
-                <div className="flex flex-col space-y-2">
+
+              <div className="space-y-4">
+                <div className="video-container">
+                  <video
+                    ref={videoRef}
+                    className="video-preview"
+                    autoPlay
+                    muted
+                  />
+                  {!isRecording && (
+                    <div className="video-overlay">
+                      <Video className="w-12 h-12 text-white/50" />
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
                   <button
                     onClick={startRecording}
                     disabled={isRecording || isProcessing}
-                    className="btn-secondary flex items-center justify-center py-2"
+                    className="btn-secondary"
                   >
-                    <Play className="w-4 h-4 mr-1 icon-bounce" />
-                    Start
+                    <Play className="w-4 h-4" />
+                    <span>Start</span>
                   </button>
                   <button
                     onClick={stopRecording}
                     disabled={!isRecording}
-                    className="btn-secondary flex items-center justify-center py-2"
+                    className="btn-secondary-alt"
                   >
-                    <Pause className="w-4 h-4 mr-1 icon-pulse" />
-                    Stop & Analyze
+                    <Pause className="w-4 h-4" />
+                    <span>Stop</span>
                   </button>
                 </div>
               </div>
@@ -282,114 +379,110 @@ function App() {
 
         {/* Processing Indicator */}
         {isProcessing && (
-          <div className="card mb-8">
-            <div className="flex items-center justify-center">
-              <Loader2
-                className="w-8 h-8 animate-spin icon-rotate mr-4"
-                style={{ color: "#51e2f5" }}
-              />
-              <span className="text-xl" style={{ color: "#a28089" }}>
-                Analyzing your emotions...
-              </span>
+          <div className="glass-card processing-card mb-8">
+            <div className="flex items-center justify-center gap-4">
+              <Loader2 className="w-10 h-10 animate-spin text-accent-orange icon-rotate" />
+              <div>
+                <h3 className="text-xl font-semibold text-white">
+                  Processing your emotions
+                </h3>
+                <p className="text-sm text-text-muted">
+                  Analyzing facial expressions and voice patterns...
+                </p>
+              </div>
             </div>
           </div>
         )}
 
         {/* Results Section */}
         {results && !results.error && (
-          <div className="space-y-8">
+          <div className="space-y-6 results-appear">
             {/* Emotion Results */}
-            <div className="card">
-              <h3
-                className="text-2xl font-semibold mb-6 flex items-center"
-                style={{ color: "#a28089" }}
-              >
-                <Heart
-                  className="w-6 h-6 icon-pulse mr-2"
-                  style={{ color: "#51e2f5" }}
-                />
-                Emotion Analysis Results
-              </h3>
-              <div className="grid md:grid-cols-3 gap-4 mb-6">
-                <div className="text-center">
-                  <div
-                    className="text-3xl font-bold icon-float"
-                    style={{ color: "#51e2f5" }}
-                  >
+            <div className="glass-card">
+              <div className="card-header">
+                <div className="flex items-center gap-3">
+                  <div className="icon-wrapper">
+                    <Heart className="w-6 h-6 icon-pulse" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-white">
+                    Emotion Analysis
+                  </h2>
+                </div>
+                <Sparkles className="w-5 h-5 text-accent-orange icon-sparkle" />
+              </div>
+
+              <div className="grid md:grid-cols-3 gap-6 mb-6">
+                <div className="emotion-card">
+                  <div className="emotion-icon">
+                    <Music className="w-8 h-8 icon-wiggle" />
+                  </div>
+                  <div className="emotion-label">Audio Emotion</div>
+                  <div className="emotion-value emotion-value-1">
                     {results.audio_emotion}
                   </div>
-                  <div className="text-sm" style={{ color: "#a28089" }}>
-                    Audio Emotion
-                  </div>
                 </div>
-                <div className="text-center">
-                  <div
-                    className="text-3xl font-bold icon-wiggle"
-                    style={{ color: "#9df9ef" }}
-                  >
+
+                <div className="emotion-card">
+                  <div className="emotion-icon">
+                    <Video className="w-8 h-8 icon-float" />
+                  </div>
+                  <div className="emotion-label">Video Emotion</div>
+                  <div className="emotion-value emotion-value-2">
                     {results.video_emotion}
                   </div>
-                  <div className="text-sm" style={{ color: "#a28089" }}>
-                    Video Emotion
-                  </div>
                 </div>
-                <div className="text-center">
-                  <div
-                    className="text-4xl font-bold icon-bounce"
-                    style={{ color: "#edf756" }}
-                  >
-                    {results.fused_emotion}
+
+                <div className="emotion-card emotion-card-primary">
+                  <div className="emotion-icon">
+                    <Brain className="w-8 h-8 icon-bounce" />
                   </div>
-                  <div className="text-sm" style={{ color: "#a28089" }}>
-                    Fused Emotion
+                  <div className="emotion-label">Fused Result</div>
+                  <div className="emotion-value emotion-value-3">
+                    {results.fused_emotion}
                   </div>
                 </div>
               </div>
-              <div
-                style={{
-                  backgroundColor: "rgba(255, 168, 182, 0.2)",
-                  padding: "1rem",
-                  borderRadius: "0.5rem",
-                }}
-              >
-                <strong style={{ color: "#a28089" }}>
-                  Cognitive Analysis:
-                </strong>{" "}
-                {results.reasoning}
+
+              <div className="reasoning-box">
+                <div className="flex items-start gap-3">
+                  <Brain className="w-5 h-5 text-accent-cyan mt-1 flex-shrink-0" />
+                  <div>
+                    <strong className="text-white">Cognitive Analysis:</strong>
+                    <p className="text-text-muted mt-1">{results.reasoning}</p>
+                  </div>
+                </div>
               </div>
             </div>
 
             {/* Temporal Charts */}
-            <div className="card">
-              <h3
-                className="text-2xl font-semibold mb-6 flex items-center"
-                style={{ color: "#a28089" }}
-              >
-                <Brain
-                  className="w-6 h-6 icon-float mr-2"
-                  style={{ color: "#9df9ef" }}
-                />
-                Temporal Emotion Analysis
-              </h3>
-              <div className="grid md:grid-cols-2 gap-6">
-                <div>
-                  <h4
-                    className="text-lg font-semibold mb-4"
-                    style={{ color: "#a28089" }}
-                  >
-                    Audio Emotions Over Time
+            <div className="glass-card">
+              <div className="card-header">
+                <div className="flex items-center gap-3">
+                  <div className="icon-wrapper">
+                    <TrendingUp className="w-6 h-6 icon-trend" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-white">
+                    Temporal Analysis
+                  </h2>
+                </div>
+                <Activity className="w-5 h-5 text-accent-cyan icon-pulse" />
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-8">
+                <div className="chart-container">
+                  <h4 className="chart-title">
+                    <Music className="w-5 h-5 icon-wiggle" />
+                    Audio Timeline
                   </h4>
                   <Line
                     data={createChartData(results.audio_probs_temporal)}
                     options={chartOptions}
                   />
                 </div>
-                <div>
-                  <h4
-                    className="text-lg font-semibold mb-4"
-                    style={{ color: "#a28089" }}
-                  >
-                    Video Emotions Over Time
+                <div className="chart-container">
+                  <h4 className="chart-title">
+                    <Video className="w-5 h-5 icon-float" />
+                    Video Timeline
                   </h4>
                   <Line
                     data={createChartData(results.video_probs_temporal)}
@@ -400,73 +493,64 @@ function App() {
             </div>
 
             {/* AI-Generated Content */}
-            <div className="card">
-              <h3
-                className="text-2xl font-semibold mb-6 flex items-center"
-                style={{ color: "#a28089" }}
-              >
-                <BookOpen
-                  className="w-6 h-6 icon-rotate mr-2"
-                  style={{ color: "#edf756" }}
-                />
-                AI-Generated Content
-              </h3>
+            <div className="glass-card">
+              <div className="card-header">
+                <div className="flex items-center gap-3">
+                  <div className="icon-wrapper">
+                    <Sparkles className="w-6 h-6 icon-sparkle" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-white">
+                    AI Recommendations
+                  </h2>
+                </div>
+                <Zap className="w-5 h-5 text-accent-orange icon-zap" />
+              </div>
+
               <div className="grid md:grid-cols-2 gap-6">
-                <div>
-                  <h4
-                    className="text-lg font-semibold mb-2 flex items-center"
-                    style={{ color: "#a28089" }}
-                  >
-                    <BookOpen
-                      className="w-5 h-5 icon-bounce mr-2"
-                      style={{ color: "#51e2f5" }}
-                    />
-                    Short Story
-                  </h4>
-                  <p style={{ color: "#a28089" }} className="italic">
-                    {results.story}
-                  </p>
+                <div className="content-card">
+                  <div className="content-header">
+                    <BookOpen className="w-5 h-5 text-accent-cyan" />
+                    <h4 className="text-lg font-semibold text-white">
+                      Personalized Story
+                    </h4>
+                  </div>
+                  <p className="content-text">{results.story}</p>
                 </div>
-                <div>
-                  <h4
-                    className="text-lg font-semibold mb-2"
-                    style={{ color: "#a28089" }}
-                  >
-                    Inspirational Quote
-                  </h4>
-                  <p style={{ color: "#a28089" }} className="italic">
-                    "{results.quote}"
-                  </p>
+
+                <div className="content-card">
+                  <div className="content-header">
+                    <Sparkles className="w-5 h-5 text-accent-orange" />
+                    <h4 className="text-lg font-semibold text-white">
+                      Inspirational Quote
+                    </h4>
+                  </div>
+                  <p className="content-text italic">"{results.quote}"</p>
                 </div>
               </div>
-              <div className="mt-6">
-                <h4
-                  className="text-lg font-semibold mb-2 flex items-center"
-                  style={{ color: "#a28089" }}
-                >
-                  <Youtube
-                    className="w-5 h-5 icon-pulse mr-2"
-                    style={{ color: "#ffa8B6" }}
-                  />
-                  Recommended YouTube Video
-                </h4>
-                <p style={{ color: "#a28089" }}>{results.video}</p>
-              </div>
-              <div className="mt-6">
-                <h4
-                  className="text-lg font-semibold mb-2 flex items-center"
-                  style={{ color: "#a28089" }}
-                >
-                  <Music
-                    className="w-5 h-5 icon-wiggle mr-2"
-                    style={{ color: "#9df9ef" }}
-                  />
-                  Recommended Song
-                </h4>
-                <p style={{ color: "#a28089" }}>
-                  {results.song ||
-                    "Based on your emotions, we recommend listening to uplifting music to enhance your current mood."}
-                </p>
+
+              <div className="grid md:grid-cols-2 gap-6 mt-6">
+                <div className="content-card">
+                  <div className="content-header">
+                    <Youtube className="w-5 h-5 text-accent-cyan" />
+                    <h4 className="text-lg font-semibold text-white">
+                      Video Suggestion
+                    </h4>
+                  </div>
+                  <p className="content-text">{results.video}</p>
+                </div>
+
+                <div className="content-card">
+                  <div className="content-header">
+                    <Music className="w-5 h-5 text-accent-orange" />
+                    <h4 className="text-lg font-semibold text-white">
+                      Music Recommendation
+                    </h4>
+                  </div>
+                  <p className="content-text">
+                    {results.song ||
+                      "Uplifting music to enhance your current mood"}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
@@ -474,20 +558,22 @@ function App() {
 
         {/* Error Display */}
         {results && results.error && (
-          <div className="card bg-red-500/20 border-red-400/30">
-            <h3 className="text-xl font-semibold text-red-400 mb-2">Error</h3>
-            <p className="text-red-200">{results.error}</p>
+          <div className="error-card">
+            <div className="flex items-center gap-3">
+              <Zap className="w-6 h-6 text-red-400" />
+              <h3 className="text-xl font-semibold text-white">
+                Analysis Error
+              </h3>
+            </div>
+            <p className="text-red-200 mt-2">{results.error}</p>
           </div>
         )}
 
         {/* Footer */}
-        <footer
-          className="text-center mt-16 py-8 border-t"
-          style={{ borderColor: "rgba(162, 128, 137, 0.3)" }}
-        >
-          <p style={{ color: "#a28089" }}>
-            Powered by advanced machine learning to understand human emotions
-            through multimodal analysis
+        <footer className="text-center mt-16 pt-8 border-t border-white/10">
+          <p className="text-text-muted text-sm">
+            Powered by advanced deep learning • Real-time multimodal emotion
+            recognition
           </p>
         </footer>
       </div>
