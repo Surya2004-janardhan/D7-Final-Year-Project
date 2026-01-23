@@ -225,7 +225,8 @@ function App() {
         <div className="orb orb-3"></div>
       </div>
 
-      <div className="container mx-auto px-4 py-12 relative z-10">
+      <div className="container mx-auto px-6 py-12 relative z-10 max-w-7xl">
+        {" "}
         {/* Header */}
         <header className="text-center mb-16">
           <div className="flex items-center justify-center mb-4">
@@ -235,10 +236,10 @@ function App() {
             </h1>
             <Sparkles className="w-10 h-10 text-accent-cyan icon-sparkle ml-3" />
           </div>
-          <p className="text-xl text-text-muted max-w-2xl mx-auto">
+          <p className="text-xl text-text-muted max-w-2xl mx-auto text-center">
             Advanced multimodal emotion recognition powered by deep learning
           </p>
-          <div className="flex items-center justify-center gap-2 mt-4">
+          <div className="flex items-centser justify-center gap-2 mt-4">
             <div className="status-badge">
               <Activity className="w-4 h-4 icon-pulse" />
               <span>Live Analysis</span>
@@ -249,7 +250,6 @@ function App() {
             </div>
           </div>
         </header>
-
         {/* Main Content Grid */}
         <div className="grid lg:grid-cols-3 gap-6 mb-8">
           {/* Upload Section - 2 columns */}
@@ -377,7 +377,6 @@ function App() {
             </div>
           </div>
         </div>
-
         {/* Processing Indicator */}
         {isProcessing && (
           <div className="glass-card processing-card mb-8">
@@ -394,7 +393,6 @@ function App() {
             </div>
           </div>
         )}
-
         {/* Results Section */}
         {results && !results.error && (
           <div className="space-y-6 results-appear">
@@ -556,7 +554,6 @@ function App() {
             </div>
           </div>
         )}
-
         {/* Error Display */}
         {results && results.error && (
           <div className="error-card">
@@ -569,7 +566,6 @@ function App() {
             <p className="text-red-200 mt-2">{results.error}</p>
           </div>
         )}
-
         {/* Footer */}
         <footer className="text-center mt-16 pt-8 border-t border-white/10">
           <p className="text-text-muted text-sm">
