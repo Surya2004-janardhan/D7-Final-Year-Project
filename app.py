@@ -52,28 +52,48 @@ def extract_mfcc(audio_path):
     try:
         # Load audio using librosa (since ffmpeg already extracted to WAV)
         y, sr = librosa.load(audio_path, sr=SR, mono=True)
-        
+
         if len(y) == 0:
             raise ValueError("Empty audio")
-        
+
+        # For short audio clips, use the entire clip as one window
+        if len(y) < int(WINDOW_SIZE * SR):
+            # Pad short audio to minimum window size
+            min_samples = int(WINDOW_SIZE * SR)
+            if len(y) < min_samples:
+                y = np.pad(y, (0, min_samples - len(y)), mode='constant')
+
         # Calculate window parameters
         window_samples = int(WINDOW_SIZE * SR)
         hop_samples = int(HOP_SIZE * SR)
-        
+
         mfcc_windows = []
         for start in range(0, len(y) - window_samples + 1, hop_samples):
             end = start + window_samples
             y_window = y[start:end]
             mfcc = librosa.feature.mfcc(y=y_window, sr=sr, n_mfcc=N_MFCC, hop_length=HOP_LENGTH)
             mfcc = mfcc.T
-            
+
             if mfcc.shape[0] < N_FRAMES:
                 mfcc = np.pad(mfcc, ((0, N_FRAMES - mfcc.shape[0]), (0, 0)), mode='constant')
             else:
                 mfcc = mfcc[:N_FRAMES]
-            
+
             mfcc_windows.append(mfcc[..., np.newaxis])
-        
+
+        # If no windows were created (very short audio), create one from the entire clip
+        if len(mfcc_windows) == 0 and len(y) > 0:
+            # Use entire audio clip
+            mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=N_MFCC, hop_length=HOP_LENGTH)
+            mfcc = mfcc.T
+
+            if mfcc.shape[0] < N_FRAMES:
+                mfcc = np.pad(mfcc, ((0, N_FRAMES - mfcc.shape[0]), (0, 0)), mode='constant')
+            else:
+                mfcc = mfcc[:N_FRAMES]
+
+            mfcc_windows.append(mfcc[..., np.newaxis])
+
         return np.array(mfcc_windows) if mfcc_windows else None
     except Exception as e:
         print(f"Failed to extract MFCC: {e}")
