@@ -1,8 +1,17 @@
 @import "tailwindcss";
+
 @layer base {
   html {
-    @apply scroll-smooth;
+    scroll-behavior: smooth;
   }
+}
+
+:root {
+  --bright-blue: #51e2f5;
+  --blue-green: #9df9ef;
+  --dusty-white: #edf756;
+  --pink-sand: #ffa8B6;
+  --dark-sand: #a28089;
 }
 
 .glass {
@@ -18,25 +27,40 @@
 }
 
 .btn-primary {
-  @apply bg-violet-600 hover:bg-violet-700 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl;
+  background: linear-gradient(135deg, var(--bright-blue), var(--blue-green));
+  color: var(--dark-sand);
+  font-weight: 600;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.5rem;
+  transition: all 0.3s ease;
+  transform: translateY(0);
+  box-shadow: 0 4px 15px rgba(81, 226, 245, 0.3);
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(81, 226, 245, 0.4);
 }
 
 .btn-secondary {
-  background-color: rgba(139, 92, 246, 0.2);
-  color: rgba(221, 214, 254, 1);
+  background-color: rgba(255, 168, 182, 0.2);
+  color: var(--pink-sand);
   font-weight: 600;
   padding: 0.5rem 1rem;
   border-radius: 0.5rem;
-  transition: all 0.3s;
-  border: 1px solid rgba(167, 139, 250, 0.3);
+  transition: all 0.3s ease;
+  border: 1px solid rgba(255, 168, 182, 0.3);
 }
 
 .btn-secondary:hover {
-  background-color: rgba(139, 92, 246, 0.3);
+  background-color: rgba(255, 168, 182, 0.3);
+  transform: scale(1.05);
 }
 
 .card {
-  @apply rounded-xl p-6 shadow-2xl;
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
   background-color: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.2);
@@ -50,10 +74,84 @@
   border: 0;
   font-size: 0.875rem;
   font-weight: 600;
-  background-color: rgb(245 243 255);
-  color: rgb(139 92 246);
+  background-color: var(--dusty-white);
+  color: var(--dark-sand);
 }
 
 .input-file:hover {
-  background-color: rgb(238 233 254);
+  background-color: var(--blue-green);
+}
+
+/* Advanced Icon Animations */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 5px var(--bright-blue);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 20px var(--bright-blue), 0 0 30px var(--bright-blue);
+    transform: scale(1.1);
+  }
+}
+
+@keyframes rotate-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes bounce-in {
+  0% { transform: scale(0.3); opacity: 0; }
+  50% { transform: scale(1.05); }
+  70% { transform: scale(0.9); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes wiggle {
+  0%, 100% { transform: rotate(-3deg); }
+  50% { transform: rotate(3deg); }
+}
+
+.icon-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.icon-pulse {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.icon-rotate {
+  animation: rotate-slow 8s linear infinite;
+}
+
+.icon-bounce {
+  animation: bounce-in 0.6s ease-out;
+}
+
+.icon-wiggle {
+  animation: wiggle 1s ease-in-out infinite;
+}
+
+.upload-zone {
+  border: 2px dashed var(--bright-blue);
+  border-radius: 1rem;
+  padding: 2rem;
+  text-align: center;
+  transition: all 0.3s ease;
+  background: linear-gradient(135deg, rgba(81, 226, 245, 0.1), rgba(157, 249, 239, 0.1));
+}
+
+.upload-zone:hover {
+  border-color: var(--blue-green);
+  background: linear-gradient(135deg, rgba(81, 226, 245, 0.2), rgba(157, 249, 239, 0.2));
+  transform: scale(1.02);
+}
+
+.recording-small {
+  max-width: 300px;
+  margin: 0 auto;
 }

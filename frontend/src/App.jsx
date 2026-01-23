@@ -166,82 +166,86 @@ function App() {
   });
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-violet-900 via-purple-900 to-indigo-900 text-white">
+    <div className="min-h-screen" style={{background: 'linear-gradient(135deg, #51e2f5, #9df9ef, #edf756)'}}>
       <div className="container mx-auto px-4 py-8">
         <header className="text-center mb-12">
-          <h1 className="text-5xl font-bold mb-4 bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent">
+          <h1 className="text-5xl font-bold mb-4" style={{background: 'linear-gradient(135deg, #51e2f5, #9df9ef)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text'}}>
             Emotion Recognition AI
           </h1>
-          <p className="text-xl text-violet-200 max-w-2xl mx-auto">
+          <p className="text-xl" style={{color: '#a28089'}}>
             Discover your emotions through AI-powered analysis of facial
             expressions and voice patterns
           </p>
         </header>
 
-        <div className="grid lg:grid-cols-2 gap-8 mb-12">
-          {/* Upload Section */}
-          <div className="card">
-            <div className="flex items-center mb-6">
-              <Upload className="w-8 h-8 text-violet-400 mr-3" />
-              <h2 className="text-2xl font-semibold">Upload Video</h2>
+        <div className="flex gap-8 mb-12">
+          {/* Upload Section - Takes up 3/4 of the space */}
+          <div className="flex-1">
+            <div className="card">
+              <div className="flex items-center mb-6">
+                <Upload className="w-8 h-8 icon-float mr-3" style={{color: '#51e2f5'}} />
+                <h2 className="text-2xl font-semibold" style={{color: '#a28089'}}>Upload Video</h2>
+              </div>
+              <div className="upload-zone">
+                <input
+                  type="file"
+                  accept="video/*"
+                  onChange={handleFileUpload}
+                  className="input-file w-full mb-4"
+                />
+                <button
+                  onClick={processUploadedVideo}
+                  disabled={!uploadedFile || isProcessing}
+                  className="btn-primary w-full flex items-center justify-center"
+                >
+                  {isProcessing ? (
+                    <Loader2 className="w-5 h-5 animate-spin mr-2 icon-pulse" />
+                  ) : (
+                    <Play className="w-5 h-5 mr-2 icon-bounce" />
+                  )}
+                  Analyze Video
+                </button>
+              </div>
+              <p className="text-sm mt-4" style={{color: '#a28089'}}>
+                Upload a video file for emotion analysis. Results may vary based
+                on camera clarity, lighting, facial expressions, and audio
+                surroundings.
+              </p>
             </div>
-            <div className="space-y-4">
-              <input
-                type="file"
-                accept="video/*"
-                onChange={handleFileUpload}
-                className="input-file w-full"
-              />
-              <button
-                onClick={processUploadedVideo}
-                disabled={!uploadedFile || isProcessing}
-                className="btn-primary w-full flex items-center justify-center"
-              >
-                {isProcessing ? (
-                  <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                ) : (
-                  <Play className="w-5 h-5 mr-2" />
-                )}
-                Analyze Video
-              </button>
-            </div>
-            <p className="text-sm text-violet-300 mt-4">
-              Upload a video file for emotion analysis. Results may vary based
-              on camera clarity, lighting, facial expressions, and audio
-              surroundings.
-            </p>
           </div>
 
-          {/* Live Recording Section */}
-          <div className="card">
-            <div className="flex items-center mb-6">
-              <Video className="w-8 h-8 text-violet-400 mr-3" />
-              <h2 className="text-2xl font-semibold">Live Recording</h2>
-            </div>
-            <div className="space-y-4">
-              <video
-                ref={videoRef}
-                className="w-full h-48 bg-black rounded-lg"
-                autoPlay
-                muted
-              />
-              <div className="flex space-x-4">
-                <button
-                  onClick={startRecording}
-                  disabled={isRecording || isProcessing}
-                  className="btn-secondary flex-1 flex items-center justify-center"
-                >
-                  <Play className="w-5 h-5 mr-2" />
-                  Start Recording
-                </button>
-                <button
-                  onClick={stopRecording}
-                  disabled={!isRecording}
-                  className="btn-secondary flex-1 flex items-center justify-center"
-                >
-                  <Pause className="w-5 h-5 mr-2" />
-                  Stop & Analyze
-                </button>
+          {/* Live Recording Section - Small sidebar */}
+          <div className="w-80">
+            <div className="card recording-small">
+              <div className="flex items-center mb-6">
+                <Video className="w-6 h-6 icon-wiggle mr-2" style={{color: '#ffa8B6'}} />
+                <h2 className="text-lg font-semibold" style={{color: '#a28089'}}>Quick Record</h2>
+              </div>
+              <div className="space-y-3">
+                <video
+                  ref={videoRef}
+                  className="w-full h-32 bg-black rounded-lg"
+                  autoPlay
+                  muted
+                />
+                <div className="flex flex-col space-y-2">
+                  <button
+                    onClick={startRecording}
+                    disabled={isRecording || isProcessing}
+                    className="btn-secondary flex items-center justify-center py-2"
+                  >
+                    <Play className="w-4 h-4 mr-1 icon-bounce" />
+                    Start
+                  </button>
+                  <button
+                    onClick={stopRecording}
+                    disabled={!isRecording}
+                    className="btn-secondary flex items-center justify-center py-2"
+                  >
+                    <Pause className="w-4 h-4 mr-1 icon-pulse" />
+                    Stop & Analyze
+                  </button>
+                </div>
               </div>
             </div>
           </div>
