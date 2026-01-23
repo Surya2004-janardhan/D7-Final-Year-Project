@@ -89,56 +89,78 @@ def extract_mfcc(audio_path):
         return None
 
 def cognitive_reasoning(audio_emotion, video_emotion, fused_emotion, audio_preds, video_preds):
-    """Add cognitive reasoning to the emotion predictions."""
+    """Enhanced cognitive reasoning with more detailed analysis."""
     reasoning = []
-    
-    # Check agreement
+
+    # Basic agreement analysis
     if audio_emotion == video_emotion:
-        reasoning.append(f"Audio and video modalities agree on {audio_emotion}.")
+        reasoning.append(f"Both audio and video modalities strongly agree on {audio_emotion}.")
     else:
-        reasoning.append(f"Audio suggests {audio_emotion}, while video suggests {video_emotion}. Fusion resulted in {fused_emotion}.")
-    
-    # Check confidence
+        reasoning.append(f"Modalities show disagreement: audio suggests {audio_emotion} while video indicates {video_emotion}. Fusion resulted in {fused_emotion} as the most balanced interpretation.")
+
+    # Confidence analysis with scores
     audio_conf = np.max(np.mean(audio_preds, axis=0))
     video_conf = np.max(np.mean(video_preds, axis=0))
-    reasoning.append(f"Audio confidence: {audio_conf:.2f}, Video confidence: {video_conf:.2f}.")
-    
-    # Temporal consistency
+    reasoning.append(f"Confidence levels: Audio {audio_conf:.2f}, Video {video_conf:.2f}. Higher confidence indicates more reliable detection.")
+
+    # Temporal consistency analysis
     audio_consistency = len(set([EMOTIONS_7[np.argmax(p)] for p in audio_preds])) / len(audio_preds)
     video_consistency = len(set([EMOTIONS_7[np.argmax(p)] for p in video_preds])) / len(video_preds)
-    reasoning.append(f"Temporal consistency - Audio: {audio_consistency:.2f}, Video: {video_consistency:.2f}.")
-    
-    # Human-like reasoning
+    reasoning.append(f"Temporal stability: Audio consistency {audio_consistency:.2f}, Video consistency {video_consistency:.2f}. Lower values indicate more emotional fluctuation.")
+
+    # Emotion intensity analysis
+    audio_intensity = np.mean([np.max(p) for p in audio_preds])
+    video_intensity = np.mean([np.max(p) for p in video_preds])
+    reasoning.append(f"Emotional intensity: Audio {audio_intensity:.2f}, Video {video_intensity:.2f}. Higher values suggest stronger emotional expression.")
+
+    # Contextual interpretation
     if fused_emotion in ['angry', 'fearful', 'sad']:
-        reasoning.append("Detected negative emotion. Consider context: is this appropriate for the situation?")
+        reasoning.append("Detected negative emotion cluster. This may indicate stress, concern, or dissatisfaction. Consider environmental factors and personal context.")
     elif fused_emotion in ['happy', 'surprised']:
-        reasoning.append("Positive emotion detected. This might indicate engagement or excitement.")
+        reasoning.append("Positive emotional state detected. This suggests engagement, satisfaction, or pleasant surprise. The person appears to be in a favorable emotional state.")
     elif fused_emotion == 'neutral':
-        reasoning.append("Neutral expression. Could indicate calmness or lack of strong emotion.")
-    
-    # Modality reliability
-    if audio_conf > video_conf:
-        reasoning.append("Audio seems more reliable than video in this case.")
-    elif video_conf > audio_conf:
-        reasoning.append("Video seems more reliable than audio in this case.")
-    
+        reasoning.append("Neutral emotional state observed. This could indicate calmness, concentration, or emotional restraint. May also suggest controlled or professional demeanor.")
+    elif fused_emotion == 'disgust':
+        reasoning.append("Disgust detected. This emotion often relates to aversion or strong disapproval. Consider recent experiences or environmental factors.")
+
+    # Modality reliability assessment
+    if abs(audio_conf - video_conf) > 0.3:
+        if audio_conf > video_conf:
+            reasoning.append("Audio modality appears more reliable. This could be due to clear vocal expression or poor video quality.")
+        else:
+            reasoning.append("Video modality appears more reliable. This might indicate clear facial expressions or audio recording issues.")
+    else:
+        reasoning.append("Both modalities show balanced reliability, suggesting consistent emotional expression across channels.")
+
+    # Temporal pattern analysis
+    audio_changes = sum(1 for i in range(1, len(audio_preds)) if np.argmax(audio_preds[i]) != np.argmax(audio_preds[i-1]))
+    video_changes = sum(1 for i in range(1, len(video_preds)) if np.argmax(video_preds[i]) != np.argmax(video_preds[i-1]))
+    reasoning.append(f"Emotional transitions: Audio {audio_changes}, Video {video_changes}. Frequent changes may indicate emotional volatility or complex feelings.")
+
     return " ".join(reasoning)
 
 def generate_llm_content(fused_emotion, reasoning, audio_temporal, video_temporal):
-    """Generate story, quote, video, and songs using Groq LLM."""
+    """Generate personalized story, quote, video, and songs using Groq LLM."""
     prompt = f"""
-Based on the detected emotion: {fused_emotion}
-Cognitive reasoning: {reasoning}
-Temporal audio emotions: {', '.join(audio_temporal)}
-Temporal video emotions: {', '.join(video_temporal)}
+Based on the emotion analysis results:
 
-Generate:
-1. A short story (2-3 sentences) related to this emotion.
-2. An inspirational quote about this emotion.
-3. A YouTube video suggestion (title and why it fits).
-4. 2-3 song recommendations strongly relevant to this emotion, with artist names.
+Primary Emotion Detected: {fused_emotion}
+Cognitive Analysis: {reasoning}
+Audio Emotional Timeline: {', '.join(audio_temporal)}
+Video Emotional Timeline: {', '.join(video_temporal)}
 
-Format the response as JSON with keys: story, quote, video, songs
+Please generate highly personalized content that directly relates to this specific emotional state and analysis:
+
+1. A short, personalized story (3-4 sentences) that captures the emotional journey shown in the timeline and explains the fusion result.
+
+2. An inspirational quote specifically tailored to someone experiencing this emotion, considering the cognitive analysis insights.
+
+3. A YouTube video recommendation with specific title, creator/channel, and detailed explanation of why it would help someone in this emotional state.
+
+4. 3-4 song recommendations that are currently popular/relevant (2024-2025 era), with specific artist names, song titles, and brief explanations of why each song matches this emotional profile.
+
+Format the response as valid JSON with keys: story, quote, video, songs (as array of strings with artist and title).
+Ensure the content is empathetic, supportive, and directly addresses the detected emotional state and cognitive insights.
 """
     try:
         headers = {
@@ -148,29 +170,75 @@ Format the response as JSON with keys: story, quote, video, songs
         data = {
             "model": "llama3-8b-8192",
             "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.7
+            "temperature": 0.8,
+            "max_tokens": 1000
         }
         response = requests.post(GROQ_URL, headers=headers, json=data)
         if response.status_code == 200:
             content = response.json()['choices'][0]['message']['content']
-            import json
+            # Clean up JSON response
+            content = content.strip()
+            if content.startswith('```json'):
+                content = content[7:]
+            if content.endswith('```'):
+                content = content[:-3]
+            content = content.strip()
             return json.loads(content)
         else:
             print(f"Groq API error: {response.status_code} - {response.text}")
-            return {
-                "story": "Unable to generate story.",
-                "quote": "Unable to generate quote.",
-                "video": "Unable to generate video suggestion.",
-                "songs": ["Unable to generate songs."]
-            }
+            return generate_fallback_content(fused_emotion)
     except Exception as e:
         print(f"LLM error: {e}")
-        return {
-            "story": "Unable to generate story.",
-            "quote": "Unable to generate quote.",
-            "video": "Unable to generate video suggestion.",
-            "songs": ["Unable to generate songs."]
+        return generate_fallback_content(fused_emotion)
+
+def generate_fallback_content(fused_emotion):
+    """Generate fallback content when LLM fails."""
+    fallbacks = {
+        'happy': {
+            'story': 'A person\'s face lit up with genuine joy as they shared exciting news, their laughter echoing with pure delight. The moment captured both the sparkle in their eyes and the warmth in their voice.',
+            'quote': '"Joy is the simplest form of gratitude." - Karl Barth',
+            'video': '"The Science of Happiness" by Yale University - A fascinating exploration of what truly makes people happy, perfect for understanding and amplifying positive emotions.',
+            'songs': ['"Happy" by Pharrell Williams - An upbeat anthem celebrating joy', '"Can\'t Stop the Feeling!" by Justin Timberlake - Infectious positivity', '"Good as Hell" by Lizzo - Self-love and confidence booster']
+        },
+        'sad': {
+            'story': 'In a quiet moment, tears welled up as memories flooded back. The weight of unspoken emotions showed in both the downward gaze and the soft, trembling voice.',
+            'quote': '"The emotion that can break your heart is sometimes the very one that heals it." - Nicholas Sparks',
+            'video': '"The Power of Vulnerability" by Brené Brown - Understanding sadness and emotional healing',
+            'songs': ['"Someone Like You" by Adele - Processing grief and loss', '"Hurt" by Johnny Cash - Deep emotional resonance', '"The Night We Met" by Lord Huron - Reflective melancholy']
+        },
+        'angry': {
+            'story': 'Frustration built up as unfairness struck, showing in the clenched jaw and raised voice. The raw emotion demanded attention and understanding.',
+            'quote': '"Anger is an acid that can do more harm to the vessel in which it is stored than to anything on which it is poured." - Mark Twain',
+            'video': '"How to Control Your Anger" by The School of Life - Practical strategies for managing anger',
+            'songs': ['"Break Stuff" by Limp Bizkit - Cathartic anger release', '"Killing in the Name" by Rage Against the Machine - Frustration outlet', '"Express Yourself" by Madonna - Channeling anger into self-expression']
+        },
+        'fearful': {
+            'story': 'Uncertainty clouded the eyes as anxiety took hold, the shaky voice betraying inner turmoil. The body language spoke of protection and hesitation.',
+            'quote': '"The only way to deal with fear is to face it head on." - Mark Twain',
+            'video': '"Conquering Fear" by Tim Ferriss - Practical techniques for overcoming anxiety',
+            'songs': ['"Fearless" by Taylor Swift - Overcoming fear', '"Brave" by Sara Bareilles - Finding courage', '"Roar" by Katy Perry - Empowerment through fear']
+        },
+        'neutral': {
+            'story': 'A composed presence filled the space, with steady gaze and measured tone. The calm exterior suggested thoughtful contemplation.',
+            'quote': '"Peace is not absence of conflict, it is the ability to cope with it." - Mahatma Gandhi',
+            'video': '"The Benefits of Mindfulness" by Headspace - Finding peace through meditation',
+            'songs': ['"Imagine" by John Lennon - Vision of peace', '"What a Wonderful World" by Louis Armstrong - Appreciation of simplicity', '"Blackbird" by The Beatles - Finding strength in stillness']
+        },
+        'surprised': {
+            'story': 'Eyes widened in unexpected delight as surprise unfolded, the gasp escaping before the smile could form. The moment captured pure, unfiltered reaction.',
+            'quote': '"The world is full of magic things, patiently waiting for our senses to grow sharper." - W.B. Yeats',
+            'video': '"The Psychology of Surprise" by Vsauce - Understanding the science of surprise',
+            'songs': ['"Surprise" by G-Eazy ft. Blackbear - Modern take on unexpected feelings', '"Wow" by Post Malone - Expressing amazement', '"Speechless" by Dan + Shay - Overwhelming positive surprise']
+        },
+        'disgust': {
+            'story': 'A look of aversion crossed the face as something disagreeable presented itself. The wrinkled nose and turned head spoke volumes.',
+            'quote': '"Disgust is the appropriate response to most situations in life." - Anonymous',
+            'video': '"Understanding Disgust" by Crash Course Psychology - The science behind this emotion',
+            'songs': ['"U + Me = Love" by P!nk - Finding beauty despite disgust', '"Shake It Off" by Taylor Swift - Moving past negative feelings', '"Toxic" by Britney Spears - Recognizing unhealthy situations']
         }
+    }
+
+    return fallbacks.get(fused_emotion, fallbacks['neutral'])
 
 def sample_frames(video_path):
     """Sample frame sequences from video over time."""

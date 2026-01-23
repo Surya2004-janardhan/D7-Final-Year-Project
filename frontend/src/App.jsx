@@ -154,7 +154,7 @@ function App() {
     },
   };
 
-  const createChartData = (probs, label) => ({
+  const createChartData = (probs) => ({
     labels: probs.map((_, i) => `T${i + 1}`),
     datasets: emotions.map((emotion, idx) => ({
       label: emotion,
@@ -303,10 +303,7 @@ function App() {
                     Audio Emotions Over Time
                   </h4>
                   <Line
-                    data={createChartData(
-                      results.audio_probs_temporal,
-                      "Audio",
-                    )}
+                    data={createChartData(results.audio_probs_temporal)}
                     options={chartOptions}
                   />
                 </div>
@@ -315,10 +312,7 @@ function App() {
                     Video Emotions Over Time
                   </h4>
                   <Line
-                    data={createChartData(
-                      results.video_probs_temporal,
-                      "Video",
-                    )}
+                    data={createChartData(results.video_probs_temporal)}
                     options={chartOptions}
                   />
                 </div>
