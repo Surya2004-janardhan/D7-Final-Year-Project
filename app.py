@@ -4,7 +4,7 @@ import numpy as np
 import librosa
 from tensorflow import keras
 import requests
-from pydub import AudioSegment
+import ffmpeg
 import os
 import json
 
@@ -40,6 +40,7 @@ WINDOW_SIZE = 0.025
 HOP_SIZE = 0.01
 N_MFCC = 13
 HOP_LENGTH = 512
+N_FRAMES = 300  # Number of time frames for MFCC features
 
 # Video processing parameters
 VIDEO_WINDOW_SIZE = 1  # seconds
@@ -49,22 +50,8 @@ NUM_FRAMES = 10
 def extract_mfcc(audio_path):
     """Extract MFCC features from audio file in windows."""
     try:
-        # Load audio using pydub (handles WebM better than librosa)
-        audio = AudioSegment.from_file(audio_path)
-        
-        # Convert to mono and get raw samples
-        audio = audio.set_channels(1)  # Convert to mono
-        samples = np.array(audio.get_array_of_samples(), dtype=np.float32)
-        
-        # Normalize to [-1, 1] range
-        samples = samples / (2**(audio.sample_width*8-1))
-        
-        # Resample if needed
-        if audio.frame_rate != SR:
-            samples = librosa.resample(samples, orig_sr=audio.frame_rate, target_sr=SR)
-        
-        y = samples
-        sr = SR
+        # Load audio using librosa (since ffmpeg already extracted to WAV)
+        y, sr = librosa.load(audio_path, sr=SR, mono=True)
         
         if len(y) == 0:
             raise ValueError("Empty audio")
@@ -301,11 +288,12 @@ def process():
         print(f"Saving video file to {video_path}")
         video_file.save(video_path)
 
-        # Extract audio from video
+        # Extract audio from video using ffmpeg-python
         print("Extracting audio from video...")
         try:
-            video_clip = AudioSegment.from_file(video_path)
-            video_clip.export(audio_path, format="wav")
+            stream = ffmpeg.input(video_path)
+            stream = ffmpeg.output(stream, audio_path, acodec='pcm_s16le', ac=1, ar='16000')
+            ffmpeg.run(stream, quiet=True, overwrite_output=True)
             print("Audio extracted successfully")
         except Exception as e:
             print(f"Audio extraction failed: {e}")
