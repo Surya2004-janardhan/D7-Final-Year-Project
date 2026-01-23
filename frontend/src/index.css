@@ -10,7 +10,7 @@
   --bright-blue: #51e2f5;
   --blue-green: #9df9ef;
   --dusty-white: #edf756;
-  --pink-sand: #ffa8B6;
+  --pink-sand: #ffa8b6;
   --dark-sand: #a28089;
 }
 
@@ -84,36 +84,63 @@
 
 /* Advanced Icon Animations */
 @keyframes float {
-  0%, 100% { transform: translateY(0px); }
-  50% { transform: translateY(-10px); }
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
 }
 
 @keyframes pulse-glow {
-  0%, 100% {
+  0%,
+  100% {
     box-shadow: 0 0 5px var(--bright-blue);
     transform: scale(1);
   }
   50% {
-    box-shadow: 0 0 20px var(--bright-blue), 0 0 30px var(--bright-blue);
+    box-shadow:
+      0 0 20px var(--bright-blue),
+      0 0 30px var(--bright-blue);
     transform: scale(1.1);
   }
 }
 
 @keyframes rotate-slow {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @keyframes bounce-in {
-  0% { transform: scale(0.3); opacity: 0; }
-  50% { transform: scale(1.05); }
-  70% { transform: scale(0.9); }
-  100% { transform: scale(1); opacity: 1; }
+  0% {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  70% {
+    transform: scale(0.9);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 @keyframes wiggle {
-  0%, 100% { transform: rotate(-3deg); }
-  50% { transform: rotate(3deg); }
+  0%,
+  100% {
+    transform: rotate(-3deg);
+  }
+  50% {
+    transform: rotate(3deg);
+  }
 }
 
 .icon-float {
@@ -142,12 +169,20 @@
   padding: 2rem;
   text-align: center;
   transition: all 0.3s ease;
-  background: linear-gradient(135deg, rgba(81, 226, 245, 0.1), rgba(157, 249, 239, 0.1));
+  background: linear-gradient(
+    135deg,
+    rgba(81, 226, 245, 0.1),
+    rgba(157, 249, 239, 0.1)
+  );
 }
 
 .upload-zone:hover {
   border-color: var(--blue-green);
-  background: linear-gradient(135deg, rgba(81, 226, 245, 0.2), rgba(157, 249, 239, 0.2));
+  background: linear-gradient(
+    135deg,
+    rgba(81, 226, 245, 0.2),
+    rgba(157, 249, 239, 0.2)
+  );
   transform: scale(1.02);
 }
 

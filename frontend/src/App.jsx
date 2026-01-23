@@ -166,13 +166,26 @@ function App() {
   });
 
   return (
-    <div className="min-h-screen" style={{background: 'linear-gradient(135deg, #51e2f5, #9df9ef, #edf756)'}}>
+    <div
+      className="min-h-screen"
+      style={{
+        background: "linear-gradient(135deg, #51e2f5, #9df9ef, #edf756)",
+      }}
+    >
       <div className="container mx-auto px-4 py-8">
         <header className="text-center mb-12">
-          <h1 className="text-5xl font-bold mb-4" style={{background: 'linear-gradient(135deg, #51e2f5, #9df9ef)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text'}}>
+          <h1
+            className="text-5xl font-bold mb-4"
+            style={{
+              background: "linear-gradient(135deg, #51e2f5, #9df9ef)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              backgroundClip: "text",
+            }}
+          >
             Emotion Recognition AI
           </h1>
-          <p className="text-xl" style={{color: '#a28089'}}>
+          <p className="text-xl" style={{ color: "#a28089" }}>
             Discover your emotions through AI-powered analysis of facial
             expressions and voice patterns
           </p>
@@ -183,8 +196,16 @@ function App() {
           <div className="flex-1">
             <div className="card">
               <div className="flex items-center mb-6">
-                <Upload className="w-8 h-8 icon-float mr-3" style={{color: '#51e2f5'}} />
-                <h2 className="text-2xl font-semibold" style={{color: '#a28089'}}>Upload Video</h2>
+                <Upload
+                  className="w-8 h-8 icon-float mr-3"
+                  style={{ color: "#51e2f5" }}
+                />
+                <h2
+                  className="text-2xl font-semibold"
+                  style={{ color: "#a28089" }}
+                >
+                  Upload Video
+                </h2>
               </div>
               <div className="upload-zone">
                 <input
@@ -206,7 +227,7 @@ function App() {
                   Analyze Video
                 </button>
               </div>
-              <p className="text-sm mt-4" style={{color: '#a28089'}}>
+              <p className="text-sm mt-4" style={{ color: "#a28089" }}>
                 Upload a video file for emotion analysis. Results may vary based
                 on camera clarity, lighting, facial expressions, and audio
                 surroundings.
@@ -218,8 +239,16 @@ function App() {
           <div className="w-80">
             <div className="card recording-small">
               <div className="flex items-center mb-6">
-                <Video className="w-6 h-6 icon-wiggle mr-2" style={{color: '#ffa8B6'}} />
-                <h2 className="text-lg font-semibold" style={{color: '#a28089'}}>Quick Record</h2>
+                <Video
+                  className="w-6 h-6 icon-wiggle mr-2"
+                  style={{ color: "#ffa8B6" }}
+                />
+                <h2
+                  className="text-lg font-semibold"
+                  style={{ color: "#a28089" }}
+                >
+                  Quick Record
+                </h2>
               </div>
               <div className="space-y-3">
                 <video
@@ -255,8 +284,13 @@ function App() {
         {isProcessing && (
           <div className="card mb-8">
             <div className="flex items-center justify-center">
-              <Loader2 className="w-8 h-8 animate-spin text-violet-400 mr-4" />
-              <span className="text-xl">Analyzing your emotions...</span>
+              <Loader2
+                className="w-8 h-8 animate-spin icon-rotate mr-4"
+                style={{ color: "#51e2f5" }}
+              />
+              <span className="text-xl" style={{ color: "#a28089" }}>
+                Analyzing your emotions...
+              </span>
             </div>
           </div>
         )}
@@ -266,44 +300,83 @@ function App() {
           <div className="space-y-8">
             {/* Emotion Results */}
             <div className="card">
-              <h3 className="text-2xl font-semibold mb-6 flex items-center">
-                <Heart className="w-6 h-6 text-violet-400 mr-2" />
+              <h3
+                className="text-2xl font-semibold mb-6 flex items-center"
+                style={{ color: "#a28089" }}
+              >
+                <Heart
+                  className="w-6 h-6 icon-pulse mr-2"
+                  style={{ color: "#51e2f5" }}
+                />
                 Emotion Analysis Results
               </h3>
               <div className="grid md:grid-cols-3 gap-4 mb-6">
                 <div className="text-center">
-                  <div className="text-3xl font-bold text-violet-400">
+                  <div
+                    className="text-3xl font-bold icon-float"
+                    style={{ color: "#51e2f5" }}
+                  >
                     {results.audio_emotion}
                   </div>
-                  <div className="text-sm text-violet-300">Audio Emotion</div>
+                  <div className="text-sm" style={{ color: "#a28089" }}>
+                    Audio Emotion
+                  </div>
                 </div>
                 <div className="text-center">
-                  <div className="text-3xl font-bold text-violet-400">
+                  <div
+                    className="text-3xl font-bold icon-wiggle"
+                    style={{ color: "#9df9ef" }}
+                  >
                     {results.video_emotion}
                   </div>
-                  <div className="text-sm text-violet-300">Video Emotion</div>
+                  <div className="text-sm" style={{ color: "#a28089" }}>
+                    Video Emotion
+                  </div>
                 </div>
                 <div className="text-center">
-                  <div className="text-4xl font-bold text-purple-400">
+                  <div
+                    className="text-4xl font-bold icon-bounce"
+                    style={{ color: "#edf756" }}
+                  >
                     {results.fused_emotion}
                   </div>
-                  <div className="text-sm text-violet-300">Fused Emotion</div>
+                  <div className="text-sm" style={{ color: "#a28089" }}>
+                    Fused Emotion
+                  </div>
                 </div>
               </div>
-              <div className="bg-violet-500/20 p-4 rounded-lg">
-                <strong>Cognitive Analysis:</strong> {results.reasoning}
+              <div
+                style={{
+                  backgroundColor: "rgba(255, 168, 182, 0.2)",
+                  padding: "1rem",
+                  borderRadius: "0.5rem",
+                }}
+              >
+                <strong style={{ color: "#a28089" }}>
+                  Cognitive Analysis:
+                </strong>{" "}
+                {results.reasoning}
               </div>
             </div>
 
             {/* Temporal Charts */}
             <div className="card">
-              <h3 className="text-2xl font-semibold mb-6 flex items-center">
-                <Brain className="w-6 h-6 text-violet-400 mr-2" />
+              <h3
+                className="text-2xl font-semibold mb-6 flex items-center"
+                style={{ color: "#a28089" }}
+              >
+                <Brain
+                  className="w-6 h-6 icon-float mr-2"
+                  style={{ color: "#9df9ef" }}
+                />
                 Temporal Emotion Analysis
               </h3>
               <div className="grid md:grid-cols-2 gap-6">
                 <div>
-                  <h4 className="text-lg font-semibold mb-4">
+                  <h4
+                    className="text-lg font-semibold mb-4"
+                    style={{ color: "#a28089" }}
+                  >
                     Audio Emotions Over Time
                   </h4>
                   <Line
@@ -312,7 +385,10 @@ function App() {
                   />
                 </div>
                 <div>
-                  <h4 className="text-lg font-semibold mb-4">
+                  <h4
+                    className="text-lg font-semibold mb-4"
+                    style={{ color: "#a28089" }}
+                  >
                     Video Emotions Over Time
                   </h4>
                   <Line
@@ -325,45 +401,72 @@ function App() {
 
             {/* AI-Generated Content */}
             <div className="card">
-              <h3 className="text-2xl font-semibold mb-6 flex items-center">
-                <BookOpen className="w-6 h-6 text-violet-400 mr-2" />
+              <h3
+                className="text-2xl font-semibold mb-6 flex items-center"
+                style={{ color: "#a28089" }}
+              >
+                <BookOpen
+                  className="w-6 h-6 icon-rotate mr-2"
+                  style={{ color: "#edf756" }}
+                />
                 AI-Generated Content
               </h3>
               <div className="grid md:grid-cols-2 gap-6">
                 <div>
-                  <h4 className="text-lg font-semibold mb-2 flex items-center">
-                    <BookOpen className="w-5 h-5 text-violet-400 mr-2" />
+                  <h4
+                    className="text-lg font-semibold mb-2 flex items-center"
+                    style={{ color: "#a28089" }}
+                  >
+                    <BookOpen
+                      className="w-5 h-5 icon-bounce mr-2"
+                      style={{ color: "#51e2f5" }}
+                    />
                     Short Story
                   </h4>
-                  <p className="text-violet-200 italic">{results.story}</p>
+                  <p style={{ color: "#a28089" }} className="italic">
+                    {results.story}
+                  </p>
                 </div>
                 <div>
-                  <h4 className="text-lg font-semibold mb-2">
+                  <h4
+                    className="text-lg font-semibold mb-2"
+                    style={{ color: "#a28089" }}
+                  >
                     Inspirational Quote
                   </h4>
-                  <p className="text-violet-200 italic">"{results.quote}"</p>
+                  <p style={{ color: "#a28089" }} className="italic">
+                    "{results.quote}"
+                  </p>
                 </div>
               </div>
               <div className="mt-6">
-                <h4 className="text-lg font-semibold mb-2 flex items-center">
-                  <Youtube className="w-5 h-5 text-violet-400 mr-2" />
+                <h4
+                  className="text-lg font-semibold mb-2 flex items-center"
+                  style={{ color: "#a28089" }}
+                >
+                  <Youtube
+                    className="w-5 h-5 icon-pulse mr-2"
+                    style={{ color: "#ffa8B6" }}
+                  />
                   Recommended YouTube Video
                 </h4>
-                <p className="text-violet-200">{results.video}</p>
+                <p style={{ color: "#a28089" }}>{results.video}</p>
               </div>
               <div className="mt-6">
-                <h4 className="text-lg font-semibold mb-2 flex items-center">
-                  <Music className="w-5 h-5 text-violet-400 mr-2" />
-                  Song Recommendations
+                <h4
+                  className="text-lg font-semibold mb-2 flex items-center"
+                  style={{ color: "#a28089" }}
+                >
+                  <Music
+                    className="w-5 h-5 icon-wiggle mr-2"
+                    style={{ color: "#9df9ef" }}
+                  />
+                  Recommended Song
                 </h4>
-                <ul className="text-violet-200 space-y-1">
-                  {results.songs.map((song, index) => (
-                    <li key={index} className="flex items-center">
-                      <Music className="w-4 h-4 mr-2" />
-                      {song}
-                    </li>
-                  ))}
-                </ul>
+                <p style={{ color: "#a28089" }}>
+                  {results.song ||
+                    "Based on your emotions, we recommend listening to uplifting music to enhance your current mood."}
+                </p>
               </div>
             </div>
           </div>
@@ -378,8 +481,11 @@ function App() {
         )}
 
         {/* Footer */}
-        <footer className="text-center mt-16 py-8 border-t border-violet-500/30">
-          <p className="text-violet-300">
+        <footer
+          className="text-center mt-16 py-8 border-t"
+          style={{ borderColor: "rgba(162, 128, 137, 0.3)" }}
+        >
+          <p style={{ color: "#a28089" }}>
             Powered by advanced machine learning to understand human emotions
             through multimodal analysis
           </p>
