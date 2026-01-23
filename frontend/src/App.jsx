@@ -14,6 +14,7 @@ import {
   Zap,
   TrendingUp,
   Activity,
+  X,
 } from "lucide-react";
 import { Line } from "react-chartjs-2";
 import {
@@ -42,19 +43,13 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [results, setResults] = useState(null);
   const [uploadedFile, setUploadedFile] = useState(null);
+  const [showModal, setShowModal] = useState(false);
+  const [modalContent, setModalContent] = useState(null);
   const videoRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
 
-  const emotions = [
-    "neutral",
-    "happy",
-    "sad",
-    "angry",
-    "fearful",
-    "disgust",
-    "surprised",
-  ];
+  const emotions = ["neutral", "happy", "sad", "angry", "fearful", "disgust"];
 
   const startRecording = async () => {
     try {
@@ -514,7 +509,24 @@ function App() {
                       Personalized Story
                     </h4>
                   </div>
-                  <p className="content-text">{results.story}</p>
+                  <div className="content-text">
+                    {results.story.split("\n").slice(0, 3).join("\n")}
+                    {results.story.split("\n").length > 3 && (
+                      <button
+                        onClick={() => {
+                          setModalContent({
+                            title: "Personalized Story",
+                            content: results.story,
+                            icon: BookOpen,
+                          });
+                          setShowModal(true);
+                        }}
+                        className="text-accent-cyan hover:text-accent-cyan/80 ml-2 underline text-sm"
+                      >
+                        read more
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="content-card">
@@ -536,20 +548,84 @@ function App() {
                       Video Suggestion
                     </h4>
                   </div>
-                  <p className="content-text">{results.video}</p>
+                  <div className="content-text">
+                    {results.video && (
+                      <div>
+                        {/* Extract YouTube link if present */}
+                        {results.video &&
+                          results.video.match(
+                            /https:\/\/www\.youtube\.com\/watch\?v=[\w-]+/,
+                          ) && (
+                            <div className="mb-2">
+                              <a
+                                href={
+                                  results.video.match(
+                                    /https:\/\/www\.youtube\.com\/watch\?v=[\w-]+/,
+                                  )[0]
+                                }
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-2 text-accent-cyan hover:text-accent-cyan/80 underline"
+                              >
+                                <Youtube className="w-4 h-4" />
+                                Watch Video
+                              </a>
+                            </div>
+                          )}
+                        <p>
+                          {results.video &&
+                            results.video
+                              .replace(
+                                /https:\/\/www\.youtube\.com\/watch\?v=[\w-]+/,
+                                "",
+                              )
+                              .trim()}
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="content-card">
                   <div className="content-header">
                     <Music className="w-5 h-5 text-accent-orange" />
                     <h4 className="text-lg font-semibold text-white">
-                      Music Recommendation
+                      Music Recommendations
                     </h4>
                   </div>
-                  <p className="content-text">
-                    {results.song ||
-                      "Uplifting music to enhance your current mood"}
-                  </p>
+                  <div className="space-y-3">
+                    {Array.isArray(results.songs) &&
+                    results.songs.length > 0 ? (
+                      results.songs.slice(0, 3).map((song, index) => (
+                        <div key={index} className="song-item">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Music className="w-4 h-4 text-accent-orange" />
+                            <span className="font-medium text-white">
+                              {song.artist} - {song.title}
+                            </span>
+                          </div>
+                          <p className="text-sm text-text-muted mb-2">
+                            {song.explanation}
+                          </p>
+                          {song.link && (
+                            <a
+                              href={song.link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-accent-cyan hover:text-accent-cyan/80 text-sm underline"
+                            >
+                              <Youtube className="w-3 h-3" />
+                              Listen now
+                            </a>
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <p className="content-text">
+                        Uplifting music to enhance your current mood
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -577,6 +653,33 @@ function App() {
           </p>
         </footer>
       </div>
+
+      {/* Modal */}
+      {showModal && modalContent && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="glass-card max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="icon-wrapper">
+                  <modalContent.icon className="w-6 h-6 text-accent-cyan" />
+                </div>
+                <h2 className="text-2xl font-bold text-white">
+                  {modalContent.title}
+                </h2>
+              </div>
+              <button
+                onClick={() => setShowModal(false)}
+                className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+              >
+                <X className="w-6 h-6 text-white" />
+              </button>
+            </div>
+            <div className="content-text whitespace-pre-line">
+              {modalContent.content}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

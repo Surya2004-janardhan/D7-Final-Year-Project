@@ -6,11 +6,12 @@ from tensorflow import keras
 import requests
 from pydub import AudioSegment
 import os
+import json
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB limit for uploads
-# Emotion labels
-EMOTIONS_7 = ['angry', 'disgust', 'fearful', 'happy', 'neutral', 'sad', 'surprised']
+# Emotion labels (must match training order)
+EMOTIONS_7 = ['neutral', 'happy', 'sad', 'angry', 'fearful', 'disgust', 'surprised']
 
 # Load models once at startup
 print("Loading models...")
@@ -154,16 +155,16 @@ Video Emotional Timeline: {', '.join(video_temporal)}
 
 Please generate highly personalized content that directly relates to this specific emotional state and analysis:
 
-1. A short, personalized story (3-4 sentences) that captures the emotional journey shown in the timeline and explains the fusion result.
+1. A short, personalized story (maximum 3 lines/sentences) that captures the emotional journey shown in the timeline and explains the fusion result.
 
 2. An inspirational quote specifically tailored to someone experiencing this emotion, considering the cognitive analysis insights.
 
-3. A YouTube video recommendation with specific title, creator/channel, and detailed explanation of why it would help someone in this emotional state.
+3. A YouTube video recommendation with DIRECT LINK (https://www.youtube.com/watch?v=VIDEO_ID), specific title, creator/channel, and detailed explanation of why it would help someone in this emotional state.
 
-4. 3-4 song recommendations that are currently popular/relevant (2024-2025 era), with specific artist names, song titles, and brief explanations of why each song matches this emotional profile.
+4. 3-4 song recommendations that are currently popular/relevant (2024-2025 era), with specific artist names, song titles, DIRECT STREAMING LINKS (Spotify, YouTube Music, or Apple Music), and brief explanations of why each song matches this emotional profile.
 
-Format the response as valid JSON with keys: story, quote, video, songs (as array of strings with artist and title).
-Ensure the content is empathetic, supportive, and directly addresses the detected emotional state and cognitive insights.
+Format the response as valid JSON with keys: story, quote, video, songs (as array of objects with artist, title, link, explanation).
+Ensure the content is empathetic, supportive, and directly addresses the detected emotional state and cognitive insights. Keep total content under 12 lines when displayed.
 """
     try:
         headers = {
@@ -296,8 +297,19 @@ def process():
         # Save uploaded video file
         video_file = request.files['video']
         video_path = 'temp_video.webm'
+        audio_path = 'temp_audio.wav'
         print(f"Saving video file to {video_path}")
         video_file.save(video_path)
+
+        # Extract audio from video
+        print("Extracting audio from video...")
+        try:
+            video_clip = AudioSegment.from_file(video_path)
+            video_clip.export(audio_path, format="wav")
+            print("Audio extracted successfully")
+        except Exception as e:
+            print(f"Audio extraction failed: {e}")
+            audio_path = None
 
         # Process video and get temporal predictions
         print("Extracting video features...")
@@ -306,6 +318,8 @@ def process():
             print("ERROR: Could not extract frames from video")
             if os.path.exists(video_path):
                 os.remove(video_path)
+            if audio_path and os.path.exists(audio_path):
+                os.remove(audio_path)
             return jsonify({'error': 'Could not extract frames from video'})
 
         print(f"Frame sequences shape: {frame_sequences.shape}")
@@ -332,6 +346,34 @@ def process():
         print(f"Video temporal analysis complete. Total sequences: {len(video_emotions_temporal)}")
         print(f"Video emotion timeline: {video_emotions_temporal}")
 
+        # Process audio if available
+        audio_preds = []
+        audio_emotions_temporal = []
+        if audio_path and os.path.exists(audio_path) and audio_model is not None:
+            print("Processing audio features...")
+            try:
+                mfcc_windows = extract_mfcc(audio_path)
+                if mfcc_windows is not None and len(mfcc_windows) > 0:
+                    print(f"Audio MFCC windows shape: {mfcc_windows.shape}")
+                    for i, mfcc_window in enumerate(mfcc_windows):
+                        pred = audio_model.predict(np.expand_dims(mfcc_window, axis=0), verbose=0)[0]
+                        audio_preds.append(pred)
+                        if i % 10 == 0:  # Log progress every 10 windows
+                            print(f"Processed audio window {i+1}/{len(mfcc_windows)}")
+
+                    audio_preds = np.array(audio_preds)
+                    audio_emotions_temporal = [EMOTIONS_7[np.argmax(pred)] for pred in audio_preds]
+                    print(f"Audio temporal analysis complete. Total windows: {len(audio_emotions_temporal)}")
+                    print(f"Audio emotion timeline: {audio_emotions_temporal}")
+                else:
+                    print("No audio features extracted")
+            except Exception as e:
+                print(f"Audio processing failed: {e}")
+                audio_preds = []
+                audio_emotions_temporal = []
+        else:
+            print("Audio processing skipped (no audio file or model not loaded)")
+
         # TIMELINE-BASED EMOTION DETERMINATION
         print("\n" + "=" * 30)
         print("TIMELINE ANALYSIS & FINAL EMOTION DETERMINATION")
@@ -339,10 +381,30 @@ def process():
 
         # Analyze timeline patterns to determine dominant emotion
         from collections import Counter
-        emotion_counts = Counter(video_emotions_temporal)
-        total_predictions = len(video_emotions_temporal)
 
-        print(f"Emotion distribution in timeline:")
+        # Combine audio and video timelines if both available
+        combined_emotions = []
+        if audio_emotions_temporal and video_emotions_temporal:
+            # Use the shorter timeline as base and interpolate the longer one
+            min_length = min(len(audio_emotions_temporal), len(video_emotions_temporal))
+            combined_emotions = []
+            for i in range(min_length):
+                # Weight both modalities equally for now
+                combined_emotions.append(video_emotions_temporal[i])  # Prioritize video for now
+            print("Using combined audio-video timeline analysis")
+        elif video_emotions_temporal:
+            combined_emotions = video_emotions_temporal
+            print("Using video-only timeline analysis")
+        elif audio_emotions_temporal:
+            combined_emotions = audio_emotions_temporal
+            print("Using audio-only timeline analysis")
+        else:
+            return jsonify({'error': 'No emotion data extracted from video or audio'})
+
+        emotion_counts = Counter(combined_emotions)
+        total_predictions = len(combined_emotions)
+
+        print(f"Combined emotion distribution in timeline:")
         for emotion, count in emotion_counts.items():
             percentage = (count / total_predictions) * 100
             print(f"  {emotion}: {count} times ({percentage:.1f}%)")
@@ -360,9 +422,9 @@ def process():
         print(f"Emotional stability: {emotional_stability:.2f}")
 
         # Analyze emotional transitions
-        transitions = sum(1 for i in range(1, len(video_emotions_temporal))
-                         if video_emotions_temporal[i] != video_emotions_temporal[i-1])
-        transition_rate = transitions / max(1, len(video_emotions_temporal) - 1)
+        transitions = sum(1 for i in range(1, len(combined_emotions))
+                         if combined_emotions[i] != combined_emotions[i-1])
+        transition_rate = transitions / max(1, len(combined_emotions) - 1)
         print(f"Emotional transitions: {transitions} changes, rate: {transition_rate:.2f}")
 
         # COGNITIVE LAYER ANALYSIS
@@ -442,7 +504,7 @@ def process():
         print("=" * 10)
 
         final_result = {
-            'audio_emotion': None,  # No audio processing currently
+            'audio_emotion': timeline_dominant_emotion if audio_emotions_temporal else None,
             'video_emotion': timeline_dominant_emotion,
             'fused_emotion': timeline_dominant_emotion,  # Based on timeline analysis
             'reasoning': cognitive_reasoning,
@@ -450,11 +512,11 @@ def process():
             'quote': llm_content.get('quote', ''),
             'video': llm_content.get('video', ''),
             'songs': llm_content.get('songs', []),
-            'audio_temporal': [],  # Empty for now
+            'audio_temporal': audio_emotions_temporal,
             'video_temporal': video_emotions_temporal,
-            'audio_probs_temporal': [],  # Empty for now
+            'audio_probs_temporal': audio_preds.tolist() if len(audio_preds) > 0 else [],
             'video_probs_temporal': video_preds.tolist(),
-            'time_points': list(range(len(video_emotions_temporal))),
+            'time_points': list(range(len(combined_emotions))),
             'timeline_confidence': float(timeline_confidence),
             'emotional_stability': float(emotional_stability),
             'transition_rate': float(transition_rate),
@@ -469,6 +531,8 @@ def process():
         # Clean up
         if os.path.exists(video_path):
             os.remove(video_path)
+        if audio_path and os.path.exists(audio_path):
+            os.remove(audio_path)
 
         return jsonify(final_result)
 
@@ -479,7 +543,7 @@ def process():
         print(f"Traceback: {tb}")
 
         # Clean up on error
-        for path in ['temp_video.webm']:
+        for path in ['temp_video.webm', 'temp_audio.wav']:
             if os.path.exists(path):
                 try:
                     os.remove(path)
