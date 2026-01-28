@@ -520,8 +520,15 @@ def process():
         print("FINAL RESULT COMPILATION")
         print("=" * 10)
 
+        # Determine majority audio emotion for display
+        if audio_emotions_temporal:
+            from collections import Counter
+            audio_majority = Counter(audio_emotions_temporal).most_common(1)[0][0]
+        else:
+            audio_majority = None
+
         final_result = {
-            'audio_emotion': timeline_dominant_emotion if audio_emotions_temporal else None,
+            'audio_emotion': audio_majority,
             'video_emotion': timeline_dominant_emotion,
             'fused_emotion': timeline_dominant_emotion,  # Based on timeline analysis
             'reasoning': cognitive_reasoning,
