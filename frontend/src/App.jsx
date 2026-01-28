@@ -107,9 +107,9 @@ function App() {
       const start = Date.now();
       interval = setInterval(() => {
         const elapsed = (Date.now() - start) / 1000;
-        if (elapsed < 12) {
-          // Go up to 95% in 12 seconds
-          setLoaderPercent(Math.min(95, Math.floor((elapsed / 12) * 95)));
+        if (elapsed < 22) {
+          // Go up to 95% in 22 seconds
+          setLoaderPercent(Math.min(95, Math.floor((elapsed / 22) * 95)));
         } else {
           setLoaderPercent(95);
           setShowProcessing(true);
