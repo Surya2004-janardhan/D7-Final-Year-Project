@@ -186,15 +186,24 @@ Ensure the content is empathetic, supportive, and directly addresses the detecte
         }
         response = requests.post(GROQ_URL, headers=headers, json=data)
         if response.status_code == 200:
-            content = response.json()['choices'][0]['message']['content']
-            # Clean up JSON response
-            content = content.strip()
-            if content.startswith('```json'):
-                content = content[7:]
-            if content.endswith('```'):
-                content = content[:-3]
-            content = content.strip()
-            return json.loads(content)
+            try:
+                raw_json = response.json()
+                content = raw_json['choices'][0]['message']['content']
+                # Clean up JSON response
+                content = content.strip()
+                if content.startswith('```json'):
+                    content = content[7:]
+                if content.endswith('```'):
+                    content = content[:-3]
+                content = content.strip()
+                try:
+                    return json.loads(content)
+                except Exception as json_err:
+                    print(f"LLM JSON parse error: {json_err}\nRaw content: {content}")
+                    return generate_fallback_content(fused_emotion)
+            except Exception as api_json_err:
+                print(f"LLM API response JSON error: {api_json_err}\nRaw response: {response.text}")
+                return generate_fallback_content(fused_emotion)
         else:
             print(f"Groq API error: {response.status_code} - {response.text}")
             return generate_fallback_content(fused_emotion)
