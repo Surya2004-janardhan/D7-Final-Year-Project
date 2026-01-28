@@ -1,4 +1,9 @@
 import React, { useState, useRef, useEffect } from "react";
+// import React, { useState, useRef, useEffect } from "react";
+
+// Stop recording when countdown hits 0 (in case setTimeout fails or is out of sync)
+// This must come after React and useEffect are imported
+
 // ErrorBoundary component to catch runtime errors
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -124,13 +129,54 @@ function App() {
     return () => clearInterval(interval);
   }, [isProcessing]);
 
+  const [recordError, setRecordError] = useState("");
+  const recordTimerRef = useRef(null);
+  const [recordingStartTime, setRecordingStartTime] = useState(null);
+  const [recordingStopped, setRecordingStopped] = useState(false);
+  const [recordCountdown, setRecordCountdown] = useState(11);
+
+  // Countdown effect for recording
+  useEffect(() => {
+    let countdownInterval;
+    if (isRecording) {
+      setRecordCountdown(11);
+      countdownInterval = setInterval(() => {
+        setRecordCountdown((prev) => {
+          if (prev <= 1) {
+            clearInterval(countdownInterval);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      setRecordCountdown(11);
+    }
+    return () => clearInterval(countdownInterval);
+  }, [isRecording]);
+
+  // Auto-stop recording when countdown hits 0
+  useEffect(() => {
+    if (isRecording && recordCountdown === 0) {
+      stopRecording();
+    }
+    // eslint-disable-next-line
+  }, [recordCountdown]);
+
   const startRecording = async () => {
+    setRecordError("");
+    setRecordingStopped(false);
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setRecordError("Your browser does not support video/audio recording.");
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: true,
         audio: true,
       });
       videoRef.current.srcObject = stream;
+      videoRef.current.muted = false; // allow playback feedback
       mediaRecorderRef.current = new MediaRecorder(stream);
 
       mediaRecorderRef.current.ondataavailable = (event) => {
@@ -140,23 +186,45 @@ function App() {
       };
 
       mediaRecorderRef.current.onstop = async () => {
-        const blob = new Blob(chunksRef.current, { type: "video/webm" });
-        await processVideo(blob);
-        chunksRef.current = [];
+        if (!recordingStopped) {
+          setRecordingStopped(true);
+          const blob = new Blob(chunksRef.current, { type: "video/webm" });
+          await processVideo(blob);
+          chunksRef.current = [];
+        }
       };
 
       mediaRecorderRef.current.start();
       setIsRecording(true);
+      setRecordingStartTime(Date.now());
+      // Auto-stop after 11 seconds
+      recordTimerRef.current = setTimeout(() => {
+        if (mediaRecorderRef.current && isRecording) {
+          mediaRecorderRef.current.stop();
+          setIsRecording(false);
+          if (videoRef.current.srcObject) {
+            videoRef.current.srcObject
+              .getTracks()
+              .forEach((track) => track.stop());
+          }
+        }
+      }, 11000);
     } catch (error) {
+      setRecordError(
+        "Could not access camera or microphone. Please check permissions and devices.",
+      );
       console.error("Error starting recording:", error);
     }
   };
 
   const stopRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
+      clearTimeout(recordTimerRef.current);
       mediaRecorderRef.current.stop();
       setIsRecording(false);
-      videoRef.current.srcObject.getTracks().forEach((track) => track.stop());
+      if (videoRef.current.srcObject) {
+        videoRef.current.srcObject.getTracks().forEach((track) => track.stop());
+      }
     }
   };
 
@@ -434,6 +502,16 @@ function App() {
                 </div>
 
                 <div className="space-y-4">
+                  {isRecording && (
+                    <div className="text-center text-lg font-bold text-accent-orange mb-2">
+                      Recording: <span>{recordCountdown}</span>s
+                    </div>
+                  )}
+                  {recordError && (
+                    <div className="text-red-400 text-sm font-semibold mb-2">
+                      {recordError}
+                    </div>
+                  )}
                   <div className="video-container">
                     <video
                       ref={videoRef}
