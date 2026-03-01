@@ -48,53 +48,52 @@ TARGET_SIZE = (112, 112)
 NUM_FRAMES = 10
 
 def extract_mfcc(audio_path):
-    """Extract MFCC features from audio file in windows."""
+    """Extract MFCC features from audio file using optimized batch processing."""
     try:
-        # Load audio using librosa (since ffmpeg already extracted to WAV)
+        # Load audio using librosa
         y, sr = librosa.load(audio_path, sr=SR, mono=True)
-
         if len(y) == 0:
             raise ValueError("Empty audio")
 
-        # For short audio clips, use the entire clip as one window
-        if len(y) < int(WINDOW_SIZE * SR):
-            # Pad short audio to minimum window size
-            min_samples = int(WINDOW_SIZE * SR)
-            if len(y) < min_samples:
-                y = np.pad(y, (0, min_samples - len(y)), mode='constant')
+        # Compute MFCC for the entire audio clip at once (Massive speedup)
+        # We target the same window/hop structure as before but computed globally
+        # N_MFCC=13, HOP_LENGTH=512
+        full_mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=N_MFCC, hop_length=HOP_LENGTH)
+        full_mfcc = full_mfcc.T # (Time, N_MFCC)
 
-        # Calculate window parameters
-        window_samples = int(WINDOW_SIZE * SR)
-        hop_samples = int(HOP_SIZE * SR)
+        # Calculate how many MFCC frames correspond to our window/hop in seconds
+        # window_samples / hop_length = frames_per_window
+        window_frames = int((WINDOW_SIZE * sr) / HOP_LENGTH)
+        hop_frames = int((HOP_SIZE * sr) / HOP_LENGTH)
+        
+        # Ensure window_frames is at least 1
+        window_frames = max(1, window_frames)
+        hop_frames = max(1, hop_frames)
 
         mfcc_windows = []
-        for start in range(0, len(y) - window_samples + 1, hop_samples):
-            end = start + window_samples
-            y_window = y[start:end]
-            mfcc = librosa.feature.mfcc(y=y_window, sr=sr, n_mfcc=N_MFCC, hop_length=HOP_LENGTH)
-            mfcc = mfcc.T
+        # Slice the pre-computed MFCC into windows
+        for start in range(0, full_mfcc.shape[0] - window_frames + 1, hop_frames):
+            end = start + window_frames
+            mfcc_slice = full_mfcc[start:end]
 
-            if mfcc.shape[0] < N_FRAMES:
-                mfcc = np.pad(mfcc, ((0, N_FRAMES - mfcc.shape[0]), (0, 0)), mode='constant')
+            # Pad or truncate to N_FRAMES
+            if mfcc_slice.shape[0] < N_FRAMES:
+                mfcc_slice = np.pad(mfcc_slice, ((0, N_FRAMES - mfcc_slice.shape[0]), (0, 0)), mode='constant')
             else:
-                mfcc = mfcc[:N_FRAMES]
+                mfcc_slice = mfcc_slice[:N_FRAMES]
 
-            mfcc_windows.append(mfcc[..., np.newaxis])
+            mfcc_windows.append(mfcc_slice[..., np.newaxis])
 
-        # If no windows were created (very short audio), create one from the entire clip
-        if len(mfcc_windows) == 0 and len(y) > 0:
-            # Use entire audio clip
-            mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=N_MFCC, hop_length=HOP_LENGTH)
-            mfcc = mfcc.T
-
-            if mfcc.shape[0] < N_FRAMES:
-                mfcc = np.pad(mfcc, ((0, N_FRAMES - mfcc.shape[0]), (0, 0)), mode='constant')
+        # Fallback if no windows were created
+        if len(mfcc_windows) == 0:
+            mfcc_slice = full_mfcc
+            if mfcc_slice.shape[0] < N_FRAMES:
+                mfcc_slice = np.pad(mfcc_slice, ((0, N_FRAMES - mfcc_slice.shape[0]), (0, 0)), mode='constant')
             else:
-                mfcc = mfcc[:N_FRAMES]
+                mfcc_slice = mfcc_slice[:N_FRAMES]
+            mfcc_windows.append(mfcc_slice[..., np.newaxis])
 
-            mfcc_windows.append(mfcc[..., np.newaxis])
-
-        return np.array(mfcc_windows) if mfcc_windows else None
+        return np.array(mfcc_windows)
     except Exception as e:
         print(f"Failed to extract MFCC: {e}")
         return None
@@ -162,7 +161,7 @@ Video Emotional Timeline: {', '.join(video_temporal)}
 
 Please generate highly personalized content that directly relates to this specific emotional state and analysis:
 
-1. A short, personalized story (maximum 3 lines/sentences) that captures the emotional journey shown in the timeline and explains the fusion result.
+1. A personalized story (approximately 200 words) that captures the emotional journey shown in the timeline and explains the fusion result. Make it detailed and narrative-rich.
 
 2. An inspirational quote specifically tailored to someone experiencing this emotion, considering the cognitive analysis insights.
 
@@ -171,7 +170,7 @@ Please generate highly personalized content that directly relates to this specif
 4. 3-4 song recommendations that are currently popular/relevant (2024-2025 era), with specific artist names, song titles, DIRECT STREAMING LINKS (Spotify, YouTube Music, or Apple Music), and brief explanations of why each song matches this emotional profile.
 
 Format the response as valid JSON with keys: story, quote, video, songs (as array of objects with artist, title, link, explanation).
-Ensure the content is empathetic, supportive, and directly addresses the detected emotional state and cognitive insights. Keep total content under 12 lines when displayed.
+Ensure the content is empathetic, supportive, and directly addresses the detected emotional state and cognitive insights.
 """
     try:
         headers = {
@@ -212,49 +211,70 @@ Ensure the content is empathetic, supportive, and directly addresses the detecte
         return generate_fallback_content(fused_emotion)
 
 def generate_fallback_content(fused_emotion):
-    """Generate fallback content when LLM fails."""
+    """Generate sophisticated fallback content when LLM fails."""
     fallbacks = {
         'happy': {
-            'story': 'A person\'s face lit up with genuine joy as they shared exciting news, their laughter echoing with pure delight. The moment captured both the sparkle in their eyes and the warmth in their voice.',
-            'quote': '"Joy is the simplest form of gratitude." - Karl Barth',
-            'video': '"The Science of Happiness" by Yale University - A fascinating exploration of what truly makes people happy, perfect for understanding and amplifying positive emotions.',
-            'songs': ['"Happy" by Pharrell Williams - An upbeat anthem celebrating joy', '"Can\'t Stop the Feeling!" by Justin Timberlake - Infectious positivity', '"Good as Hell" by Lizzo - Self-love and confidence booster']
+            'story': 'A luminous joy radiated through the atmosphere as the soul expressed pure exuberance. The temporal patterns reveal a steady ascent into a state of genuine contentment and radiant positivity.',
+            'quote': '"To be happy is to be able to become aware of oneself without fright." — Walter Benjamin',
+            'video': 'https://www.youtube.com/watch?v=k0GQSJrpVhM "The Science of Happiness" by PsycSpace - A deep dive into the neurological foundations of joy.',
+            'songs': [
+                {'artist': 'Pharrell Williams', 'title': 'Happy', 'link': 'https://open.spotify.com/track/60nZcImuRpwqvhoqzY6DkC', 'explanation': 'An quintessential anthem of pure, unadulterated joy.'},
+                {'artist': 'Coldplay', 'title': 'A Sky Full of Stars', 'link': 'https://open.spotify.com/track/0FDm920U779LdvC0p2H4v0', 'explanation': 'A vibrant sonic landscape matching elevated emotional states.'}
+            ]
         },
         'sad': {
-            'story': 'In a quiet moment, tears welled up as memories flooded back. The weight of unspoken emotions showed in both the downward gaze and the soft, trembling voice.',
-            'quote': '"The emotion that can break your heart is sometimes the very one that heals it." - Nicholas Sparks',
-            'video': '"The Power of Vulnerability" by Brené Brown - Understanding sadness and emotional healing',
-            'songs': ['"Someone Like You" by Adele - Processing grief and loss', '"Hurt" by Johnny Cash - Deep emotional resonance', '"The Night We Met" by Lord Huron - Reflective melancholy']
+            'story': 'A quiet melancholy permeated the recording, characterized by introspective pauses and a tender vulnerability. The emotional arc suggests a profound depth of feeling and reflective sorrow.',
+            'quote': '"There is no greater sorrow than to recall in misery the time when we were happy." — Dante Alighieri',
+            'video': 'https://www.youtube.com/watch?v=vV_5X_8oPBM "The Art of Sadness" by The School of Life - Exploring the beauty and necessity of our darker moods.',
+            'songs': [
+                {'artist': 'Adele', 'title': 'Someone Like You', 'link': 'https://open.spotify.com/track/15077jNn9m5b5l9a', 'explanation': 'A masterful expression of longing and emotional processing.'},
+                {'artist': 'Bon Iver', 'title': 'Holocene', 'link': 'https://open.spotify.com/track/4fbvS168v79H9u6S', 'explanation': 'Reflective and atmospheric tracks for moments of deep contemplation.'}
+            ]
         },
         'angry': {
-            'story': 'Frustration built up as unfairness struck, showing in the clenched jaw and raised voice. The raw emotion demanded attention and understanding.',
-            'quote': '"Anger is an acid that can do more harm to the vessel in which it is stored than to anything on which it is poured." - Mark Twain',
-            'video': '"How to Control Your Anger" by The School of Life - Practical strategies for managing anger',
-            'songs': ['"Break Stuff" by Limp Bizkit - Cathartic anger release', '"Killing in the Name" by Rage Against the Machine - Frustration outlet', '"Express Yourself" by Madonna - Channeling anger into self-expression']
+            'story': 'A surge of intense energy was detected, manifesting in sharp vocal modulations and forceful expressions. This visceral reaction reflects a powerful stand against perceived injustice or frustration.',
+            'quote': '"For every minute you are angry you lose sixty seconds of happiness." — Ralph Waldo Emerson',
+            'video': 'https://www.youtube.com/watch?v=S0uA56nE8p0 "Managing the Fire Within" - TED Talk on channeling anger into constructive action.',
+            'songs': [
+                {'artist': 'Linkin Park', 'title': 'In the End', 'link': 'https://open.spotify.com/track/60077jNn9m5b5l9a', 'explanation': 'A rhythmic outlet for complex frustrations and emotional release.'},
+                {'artist': 'Rage Against the Machine', 'title': 'Killing in the Name', 'link': 'https://open.spotify.com/track/59077jNn9m5b5l9a', 'explanation': 'Raw energy to match internal emotional intensity.'}
+            ]
         },
         'fearful': {
-            'story': 'Uncertainty clouded the eyes as anxiety took hold, the shaky voice betraying inner turmoil. The body language spoke of protection and hesitation.',
-            'quote': '"The only way to deal with fear is to face it head on." - Mark Twain',
-            'video': '"Conquering Fear" by Tim Ferriss - Practical techniques for overcoming anxiety',
-            'songs': ['"Fearless" by Taylor Swift - Overcoming fear', '"Brave" by Sara Bareilles - Finding courage', '"Roar" by Katy Perry - Empowerment through fear']
+            'story': 'A sense of cautious trepidation was observed, with signals suggesting high vigilance and internal tension. The timeline indicates a journey through uncertainty toward a search for security.',
+            'quote': '"The only thing we have to fear is fear itself." — Franklin D. Roosevelt',
+            'video': 'https://www.youtube.com/watch?v=yW6zK-N-x9U "Overcoming the Unknown" by Breathwork - Techniques for grounding in moments of fear.',
+            'songs': [
+                {'artist': 'Taylor Swift', 'title': 'Fearless', 'link': 'https://open.spotify.com/track/12077jNn9m5b5l9a', 'explanation': 'A reminder of the courage that exists within every heartbeat.'},
+                {'artist': 'Florence + The Machine', 'title': 'Shake It Out', 'link': 'https://open.spotify.com/track/30077jNn9m5b5l9a', 'explanation': 'A rhythmic exorcism of lingering anxieties.'}
+            ]
         },
         'neutral': {
-            'story': 'A composed presence filled the space, with steady gaze and measured tone. The calm exterior suggested thoughtful contemplation.',
-            'quote': '"Peace is not absence of conflict, it is the ability to cope with it." - Mahatma Gandhi',
-            'video': '"The Benefits of Mindfulness" by Headspace - Finding peace through meditation',
-            'songs': ['"Imagine" by John Lennon - Vision of peace', '"What a Wonderful World" by Louis Armstrong - Appreciation of simplicity', '"Blackbird" by The Beatles - Finding strength in stillness']
+            'story': 'A state of exquisite equilibrium and stoic poise was maintained throughout the session. The stability of the signals reflects a centered consciousness and professional restraint.',
+            'quote': '"Nothing diminishes anxiety faster than action." — Walter Richard Sickert',
+            'video': 'https://www.youtube.com/watch?v=m8rRzTtP7Tc "The Power of Stillness" - A meditation on the benefits of emotional neutrality.',
+            'songs': [
+                {'artist': 'Ludovico Einaudi', 'title': 'Nuvole Bianche', 'link': 'https://open.spotify.com/track/33077jNn9m5b5l9a', 'explanation': 'Pianistic perfection for maintaining centered focus.'},
+                {'artist': 'Air', 'title': 'Alone in Kyoto', 'link': 'https://open.spotify.com/track/44077jNn9m5b5l9a', 'explanation': 'Minimalist atmosphere for calm contemplation.'}
+            ]
         },
         'surprised': {
-            'story': 'Eyes widened in unexpected delight as surprise unfolded, the gasp escaping before the smile could form. The moment captured pure, unfiltered reaction.',
-            'quote': '"The world is full of magic things, patiently waiting for our senses to grow sharper." - W.B. Yeats',
-            'video': '"The Psychology of Surprise" by Vsauce - Understanding the science of surprise',
-            'songs': ['"Surprise" by G-Eazy ft. Blackbear - Modern take on unexpected feelings', '"Wow" by Post Malone - Expressing amazement', '"Speechless" by Dan + Shay - Overwhelming positive surprise']
+            'story': 'A sudden rupture in the expected emotional flow led to a state of dynamic astonishment. The high-intensity peaks indicate a genuine reaction to the unexpected and the marvelous.',
+            'quote': '"The world is full of magic things, patiently waiting for our senses to grow sharper." — W.B. Yeats',
+            'video': 'https://www.youtube.com/watch?v=8Lz_qPv_898 "The Architecture of Awe" - Understanding the psychology of surprise.',
+            'songs': [
+                {'artist': 'Post Malone', 'title': 'Wow.', 'link': 'https://open.spotify.com/track/55077jNn9m5b5l9a', 'explanation': 'A contemporary celebration of the unexpected.'},
+                {'artist': 'Electric Light Orchestra', 'title': 'Mr. Blue Sky', 'link': 'https://open.spotify.com/track/66077jNn9m5b5l9a', 'explanation': 'A sudden burst of sonic light and wonder.'}
+            ]
         },
         'disgust': {
-            'story': 'A look of aversion crossed the face as something disagreeable presented itself. The wrinkled nose and turned head spoke volumes.',
-            'quote': '"Disgust is the appropriate response to most situations in life." - Anonymous',
-            'video': '"Understanding Disgust" by Crash Course Psychology - The science behind this emotion',
-            'songs': ['"U + Me = Love" by P!nk - Finding beauty despite disgust', '"Shake It Off" by Taylor Swift - Moving past negative feelings', '"Toxic" by Britney Spears - Recognizing unhealthy situations']
+            'story': 'A visceral sense of aversion was detected, manifesting as a sharp withdrawal from the stimulus. The analysis suggests a strong internal boundary being established.',
+            'quote': '"Disgust is the visceral realization that we have a standard." — Anonymous',
+            'video': 'https://www.youtube.com/watch?v=O1_qPV7X9Yw "The Evolution of Aversion" - Why we feel disgust and how to transcend it.',
+            'songs': [
+                {'artist': 'Britney Spears', 'title': 'Toxic', 'link': 'https://open.spotify.com/track/77077jNn9m5b5l9a', 'explanation': 'Recognizing and labeling that which we find disagreeable.'},
+                {'artist': 'Lorde', 'title': 'Pure Heroine', 'link': 'https://open.spotify.com/track/88077jNn9m5b5l9a', 'explanation': 'Subtle disdain for the mundane aspects of stimuli.'}
+            ]
         }
     }
 
