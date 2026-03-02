@@ -23,7 +23,6 @@ export default function RecordingPanel({
     stopStream,
   } = recorder;
 
-  // When switching to live mode, request permission
   useEffect(() => {
     if (mode === 'live') {
       requestPermission();
@@ -78,9 +77,9 @@ export default function RecordingPanel({
         <div className="inline-flex glass rounded-xl p-1 gap-1">
           <button
             onClick={() => { setMode('upload'); setRecordingBlob(null); }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 cursor-pointer ${
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 cursor-pointer ${
               mode === 'upload'
-                ? 'bg-rajah/20 text-rajah shadow-sm'
+                ? 'bg-rajah/20 text-rajah'
                 : 'text-text-secondary hover:text-text-primary'
             }`}
           >
@@ -89,9 +88,9 @@ export default function RecordingPanel({
           </button>
           <button
             onClick={() => { setMode('live'); setUploadedFile(null); }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 cursor-pointer ${
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 cursor-pointer ${
               mode === 'live'
-                ? 'bg-rajah/20 text-rajah shadow-sm'
+                ? 'bg-rajah/20 text-rajah'
                 : 'text-text-secondary hover:text-text-primary'
             }`}
           >
@@ -104,17 +103,20 @@ export default function RecordingPanel({
       {/* Upload Area */}
       {mode === 'upload' && (
         <div
-          className={`glass glow-border rounded-2xl p-8 text-center transition-all duration-300 ${
-            dragOver ? 'border-rajah/50 bg-rajah/5 scale-[1.01]' : ''
+          className={`glass glow-border rounded-2xl p-10 text-center transition-all duration-300 ${
+            dragOver ? 'scale-[1.01]' : ''
           }`}
+          style={dragOver ? { borderColor: 'rgba(251,176,110,0.5)', background: 'rgba(251,176,110,0.05)' } : {}}
           onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
           onDragLeave={() => setDragOver(false)}
           onDrop={handleDrop}
         >
           {uploadedFile ? (
-            <div className="space-y-3">
-              <Video className="w-12 h-12 mx-auto text-rajah" />
-              <p className="text-text-primary font-medium">{uploadedFile.name}</p>
+            <div className="space-y-4">
+              <div className="w-16 h-16 mx-auto rounded-2xl flex items-center justify-center" style={{ background: 'rgba(251,176,110,0.12)' }}>
+                <Video className="w-8 h-8 text-rajah" />
+              </div>
+              <p className="text-text-primary font-medium text-base">{uploadedFile.name}</p>
               <p className="text-text-muted text-sm">
                 {(uploadedFile.size / (1024 * 1024)).toFixed(1)} MB
               </p>
@@ -127,18 +129,22 @@ export default function RecordingPanel({
               </button>
             </div>
           ) : (
-            <div className="space-y-3">
-              <Upload className="w-12 h-12 mx-auto text-text-muted" />
-              <p className="text-text-secondary">
-                Drag & drop a video here, or{' '}
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="text-rajah underline underline-offset-2 hover:text-rajah-light transition-colors cursor-pointer"
-                >
-                  browse
-                </button>
-              </p>
-              <p className="text-text-muted text-xs">MP4, WebM, AVI — up to 100 MB</p>
+            <div className="space-y-4">
+              <div className="w-16 h-16 mx-auto rounded-2xl flex items-center justify-center" style={{ background: 'rgba(61,78,110,0.4)' }}>
+                <Upload className="w-8 h-8 text-text-muted" />
+              </div>
+              <div>
+                <p className="text-text-secondary text-base">
+                  Drag & drop a video here, or{' '}
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="text-rajah underline underline-offset-2 hover:text-rajah-light transition-colors cursor-pointer"
+                  >
+                    browse
+                  </button>
+                </p>
+                <p className="text-text-muted text-xs mt-1.5">MP4, WebM, AVI — up to 100 MB</p>
+              </div>
             </div>
           )}
           <input
@@ -165,7 +171,7 @@ export default function RecordingPanel({
                 className="w-full h-full object-cover"
               />
             ) : (
-              <div className="text-center space-y-2">
+              <div className="text-center space-y-2 p-8">
                 <Camera className="w-10 h-10 mx-auto text-text-muted" />
                 <p className="text-text-secondary text-sm">Requesting camera access...</p>
               </div>
@@ -175,9 +181,8 @@ export default function RecordingPanel({
             {isRecording && (
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <div className="relative">
-                  {/* Pulse ring */}
-                  <div className="absolute -inset-4 rounded-full border-2 border-red-500/40 animate-pulse-ring" />
-                  <div className="w-20 h-20 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center border border-red-500/30">
+                  <div className="absolute -inset-4 rounded-full animate-pulse-ring" style={{ border: '2px solid rgba(239,68,68,0.4)' }} />
+                  <div className="w-20 h-20 rounded-full flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)', border: '1px solid rgba(239,68,68,0.3)' }}>
                     <span className="text-3xl font-bold text-white tabular-nums">{countdown}</span>
                   </div>
                 </div>
@@ -186,7 +191,7 @@ export default function RecordingPanel({
 
             {/* Recording indicator */}
             {isRecording && (
-              <div className="absolute top-3 left-3 flex items-center gap-2 bg-black/40 backdrop-blur-sm px-2.5 py-1 rounded-full">
+              <div className="absolute top-3 left-3 flex items-center gap-2 px-2.5 py-1 rounded-full" style={{ background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(8px)' }}>
                 <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
                 <span className="text-xs font-medium text-white">REC</span>
               </div>
@@ -194,21 +199,23 @@ export default function RecordingPanel({
           </div>
 
           {/* Controls */}
-          <div className="p-4 flex justify-center">
+          <div className="p-5 flex justify-center">
             {!isRecording ? (
               <button
                 onClick={handleRecord}
                 disabled={!hasPermission}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-rajah/15 border border-rajah/30 text-rajah font-medium text-sm hover:bg-rajah/25 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                className="flex items-center gap-2 px-6 py-3 rounded-xl text-rajah font-medium text-sm hover:bg-rajah/25 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                style={{ background: 'rgba(251,176,110,0.1)', border: '1px solid rgba(251,176,110,0.25)' }}
               >
                 <Camera className="w-4 h-4" />
                 Start Recording
-                <span className="text-text-muted text-xs">(11s)</span>
+                <span className="text-text-muted text-xs ml-1">(11s)</span>
               </button>
             ) : (
               <button
                 onClick={handleRecord}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-red-500/15 border border-red-500/30 text-red-400 font-medium text-sm hover:bg-red-500/25 transition-all cursor-pointer"
+                className="flex items-center gap-2 px-6 py-3 rounded-xl text-red-400 font-medium text-sm hover:bg-red-500/25 transition-all cursor-pointer"
+                style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)' }}
               >
                 <StopCircle className="w-4 h-4" />
                 Stop & Analyze
@@ -218,9 +225,9 @@ export default function RecordingPanel({
 
           {/* Recorded confirmation */}
           {recordingBlob && !isRecording && (
-            <div className="px-4 pb-4 text-center">
+            <div className="px-5 pb-4 text-center">
               <p className="text-sm text-em-happy flex items-center justify-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-em-happy" />
+                <span className="w-1.5 h-1.5 rounded-full bg-em-happy inline-block" />
                 Recording captured — ready to analyze
               </p>
             </div>
@@ -229,15 +236,16 @@ export default function RecordingPanel({
       )}
 
       {/* Analyze Button */}
-      <div className="mt-5 flex justify-center">
+      <div className="mt-6 flex justify-center">
         <button
           onClick={handleAnalyze}
           disabled={!canAnalyze || isProcessing}
-          className="px-8 py-3 rounded-xl font-semibold text-sm tracking-wide transition-all duration-300 cursor-pointer
+          className="px-10 py-3.5 rounded-xl font-semibold text-sm tracking-wide transition-all duration-300 cursor-pointer
             disabled:opacity-30 disabled:cursor-not-allowed
             bg-gradient-to-r from-rajah to-rajah-light text-bluewood-dark
-            hover:shadow-lg hover:shadow-rajah/20 hover:scale-[1.02]
+            hover:shadow-lg hover:scale-[1.02]
             active:scale-[0.98]"
+          style={{ boxShadow: canAnalyze ? '0 8px 24px rgba(251,176,110,0.2)' : 'none' }}
         >
           Analyze Emotions
         </button>

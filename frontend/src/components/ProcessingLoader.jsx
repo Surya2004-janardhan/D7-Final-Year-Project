@@ -14,7 +14,6 @@ const STATUS_MAP = {
 export default function ProcessingLoader({ progress, status }) {
   const displayStatus = STATUS_MAP[status] || status || 'Processing...';
 
-  // Determine section label
   let sectionLabel = '';
   if (progress <= 10) sectionLabel = 'Audio Extraction';
   else if (progress <= 40) sectionLabel = 'Video Processing';
@@ -29,7 +28,7 @@ export default function ProcessingLoader({ progress, status }) {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <Loader2 className="w-4.5 h-4.5 text-rajah animate-spin" />
+            <Loader2 className="w-5 h-5 text-rajah animate-spin" />
             <span className="text-sm font-medium text-text-secondary">{displayStatus}</span>
           </div>
           <span className="text-2xl font-bold text-rajah tabular-nums">{Math.round(progress)}%</span>
@@ -37,18 +36,17 @@ export default function ProcessingLoader({ progress, status }) {
 
         {/* Progress bar */}
         <div className="relative">
-          <div className="h-2.5 rounded-full bg-bluewood-dark overflow-hidden">
+          <div className="h-3 rounded-full bg-bluewood-dark overflow-hidden">
             <div
               className="progress-bar-fill h-full rounded-full bg-gradient-to-r from-rajah-dark via-rajah to-rajah-light relative"
               style={{ width: `${progress}%` }}
             >
-              {/* Shimmer effect */}
               <div className="absolute inset-0 animate-shimmer rounded-full" />
             </div>
           </div>
 
           {/* Section markers */}
-          <div className="flex justify-between mt-2 px-0.5">
+          <div className="flex justify-between mt-2.5 px-0.5">
             {[
               { pct: 10, label: 'Extract' },
               { pct: 40, label: 'Video' },
@@ -58,14 +56,12 @@ export default function ProcessingLoader({ progress, status }) {
             ].map((m) => (
               <div key={m.pct} className="flex flex-col items-center">
                 <div
-                  className={`w-1 h-1 rounded-full mb-1 transition-colors duration-500 ${
-                    progress >= m.pct ? 'bg-rajah' : 'bg-text-muted/30'
-                  }`}
+                  className="w-1.5 h-1.5 rounded-full mb-1 transition-colors duration-500"
+                  style={{ backgroundColor: progress >= m.pct ? '#FBB06E' : 'rgba(100,116,139,0.3)' }}
                 />
                 <span
-                  className={`text-[10px] transition-colors duration-500 ${
-                    progress >= m.pct ? 'text-rajah' : 'text-text-muted/50'
-                  }`}
+                  className="text-[10px] font-medium transition-colors duration-500"
+                  style={{ color: progress >= m.pct ? '#FBB06E' : 'rgba(100,116,139,0.5)' }}
                 >
                   {m.label}
                 </span>
