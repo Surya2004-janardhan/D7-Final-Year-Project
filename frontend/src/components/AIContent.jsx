@@ -1,16 +1,12 @@
-import { useState } from 'react';
-import { Sparkles, BookOpen, Quote, Play, Music, BookMarked, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Sparkles, BookOpen, Quote, Play, Pause, Music, BookMarked, ExternalLink } from 'lucide-react';
+import axios from 'axios';
 
-/**
- * Extract YouTube video ID from various URL formats:
- * - youtu.be/VIDEO_ID
- * - youtube.com/watch?v=VIDEO_ID
- * - youtube.com/embed/VIDEO_ID
- */
+/* ── YouTube embed helper ─────────────────────────────── */
 function extractYTId(url) {
   if (!url) return null;
-  const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/))([a-zA-Z0-9_-]{11})/);
-  return match ? match[1] : null;
+  const m = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/))([a-zA-Z0-9_-]{11})/);
+  return m ? m[1] : null;
 }
 
 function YouTubeEmbed({ url, title }) {
@@ -29,12 +25,105 @@ function YouTubeEmbed({ url, title }) {
   );
 }
 
+/* ── Deezer song player ───────────────────────────────── */
+function SongPlayer({ artist, title, link }) {
+  const [track, setTrack] = useState(null);
+  const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [searched, setSearched] = useState(false);
+  const audioRef = useRef(null);
+
+  const search = async () => {
+    if (searched) { togglePlay(); return; }
+    setLoading(true);
+    try {
+      const q = `${artist} ${title}`.trim();
+      const res = await axios.get(`/music/search?q=${encodeURIComponent(q)}`);
+      if (res.data.preview) {
+        setTrack(res.data);
+        setSearched(true);
+        // Auto-play after search
+        setTimeout(() => {
+          if (audioRef.current) {
+            audioRef.current.src = res.data.preview;
+            audioRef.current.play();
+            setPlaying(true);
+          }
+        }, 100);
+      }
+    } catch { /* silent */ }
+    setLoading(false);
+  };
+
+  const togglePlay = () => {
+    if (!audioRef.current || !track) return;
+    if (playing) { audioRef.current.pause(); setPlaying(false); }
+    else { audioRef.current.play(); setPlaying(true); }
+  };
+
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a) return;
+    const onTime = () => setProgress(a.duration ? (a.currentTime / a.duration) * 100 : 0);
+    const onEnd = () => { setPlaying(false); setProgress(0); };
+    a.addEventListener('timeupdate', onTime);
+    a.addEventListener('ended', onEnd);
+    return () => { a.removeEventListener('timeupdate', onTime); a.removeEventListener('ended', onEnd); };
+  }, [track]);
+
+  return (
+    <div className="flex items-center gap-3 group">
+      {/* Album art or play button */}
+      <button
+        onClick={search}
+        disabled={loading}
+        className="w-10 h-10 rounded-lg shrink-0 flex items-center justify-center overflow-hidden cursor-pointer transition-all hover:scale-105"
+        style={{
+          background: track?.album_art ? `url(${track.album_art}) center/cover` : 'rgba(213,207,47,0.08)',
+          border: '1px solid rgba(213,207,47,0.12)',
+        }}
+      >
+        {loading ? (
+          <div className="w-3 h-3 border-2 border-wattle border-t-transparent rounded-full animate-spin" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center" style={track?.album_art ? { background: 'rgba(0,0,0,0.35)' } : {}}>
+            {playing ? <Pause className="w-3.5 h-3.5 text-wattle" /> : <Play className="w-3.5 h-3.5 text-wattle" />}
+          </div>
+        )}
+      </button>
+
+      {/* Track info + progress */}
+      <div className="flex-1 min-w-0">
+        <p className="text-sm text-text-primary font-medium truncate">
+          {title} <span className="text-text-muted font-normal">— {artist}</span>
+        </p>
+        {track ? (
+          <div className="mt-1 h-1 rounded-full bg-cherry-dark overflow-hidden">
+            <div className="h-full rounded-full bg-wattle transition-all" style={{ width: `${progress}%` }} />
+          </div>
+        ) : (
+          <p className="text-[10px] text-text-muted mt-0.5">Click to play preview</p>
+        )}
+      </div>
+
+      {/* External link */}
+      {link && (
+        <a href={link} target="_blank" rel="noopener noreferrer" className="text-wattle/40 hover:text-wattle transition-colors shrink-0">
+          <ExternalLink className="w-3 h-3" />
+        </a>
+      )}
+
+      <audio ref={audioRef} preload="none" />
+    </div>
+  );
+}
+
+/* ── Main component ───────────────────────────────────── */
 export default function AIContent({ results }) {
   if (!results) return null;
   const { story, quote, video, books, songs } = results;
-  const [playingIdx, setPlayingIdx] = useState(null);
 
-  // Parse video — could be string (old format) or object (new format)
   const videoObj = typeof video === 'object' && video !== null
     ? video
     : typeof video === 'string'
@@ -48,9 +137,8 @@ export default function AIContent({ results }) {
         AI Recommendations Engine
       </h3>
 
-      {/* Row 1: Story + Books side by side */}
+      {/* Row 1: Story + Books */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-        {/* Story — takes 3/5 width */}
         {story && (
           <div className="lg:col-span-3 glass glow-border rounded-2xl p-5 space-y-3">
             <div className="flex items-center gap-2 text-wattle">
@@ -60,8 +148,6 @@ export default function AIContent({ results }) {
             <p className="text-sm text-text-secondary leading-relaxed">{story}</p>
           </div>
         )}
-
-        {/* Books — takes 2/5 width */}
         {books && books.length > 0 && (
           <div className="lg:col-span-2 glass glow-border rounded-2xl p-5 space-y-3">
             <div className="flex items-center gap-2 text-wattle">
@@ -84,9 +170,8 @@ export default function AIContent({ results }) {
         )}
       </div>
 
-      {/* Row 2: Quote + Video side by side */}
+      {/* Row 2: Quote + Video */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Quote */}
         {quote && (
           <div className="glass glow-border rounded-2xl p-5 flex flex-col justify-center space-y-2">
             <Quote className="w-5 h-5 text-wattle/30" />
@@ -95,18 +180,13 @@ export default function AIContent({ results }) {
             </blockquote>
           </div>
         )}
-
-        {/* Watch This — with embedded player */}
         {videoObj && (
           <div className="glass glow-border rounded-2xl p-5 space-y-3">
             <div className="flex items-center gap-2 text-wattle">
               <Play className="w-4 h-4" />
               <span className="text-xs font-semibold uppercase tracking-wider">Watch This</span>
             </div>
-            {/* Embedded YouTube player */}
-            {extractYTId(videoObj.link) && (
-              <YouTubeEmbed url={videoObj.link} title={videoObj.title} />
-            )}
+            {extractYTId(videoObj.link) && <YouTubeEmbed url={videoObj.link} title={videoObj.title} />}
             <div className="space-y-1">
               {videoObj.title && <p className="text-sm text-text-primary font-medium">{videoObj.title}</p>}
               {videoObj.channel && <p className="text-[11px] text-text-muted">by {videoObj.channel}</p>}
@@ -116,56 +196,18 @@ export default function AIContent({ results }) {
         )}
       </div>
 
-      {/* Row 3: Songs playlist with inline players */}
+      {/* Row 3: Songs with Deezer preview player */}
       {songs && songs.length > 0 && (
-        <div className="glass glow-border rounded-2xl p-5 space-y-3">
+        <div className="glass glow-border rounded-2xl p-5 space-y-4">
           <div className="flex items-center gap-2 text-wattle">
             <Music className="w-4 h-4" />
             <span className="text-xs font-semibold uppercase tracking-wider">Playlist</span>
+            <span className="text-[9px] text-text-muted ml-auto">Powered by Deezer</span>
           </div>
           <div className="space-y-3">
-            {songs.map((song, i) => {
-              const hasEmbed = !!extractYTId(song.link);
-              const isPlaying = playingIdx === i;
-              return (
-                <div key={i}>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-text-muted font-bold w-4 shrink-0">{i + 1}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-text-primary font-medium truncate">
-                        {song.title || 'Unknown'}{' '}
-                        <span className="text-text-muted font-normal">— {song.artist || 'Unknown'}</span>
-                      </p>
-                      {song.explanation && <p className="text-xs text-text-muted mt-0.5 line-clamp-1">{song.explanation}</p>}
-                    </div>
-                    {hasEmbed ? (
-                      <button
-                        onClick={() => setPlayingIdx(isPlaying ? null : i)}
-                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all cursor-pointer shrink-0"
-                        style={{
-                          background: isPlaying ? 'rgba(213,207,47,0.15)' : 'rgba(213,207,47,0.08)',
-                          color: '#D5CF2F',
-                          border: '1px solid rgba(213,207,47,0.15)',
-                        }}
-                      >
-                        {isPlaying ? <ChevronUp className="w-3 h-3" /> : <Play className="w-3 h-3" />}
-                        {isPlaying ? 'Close' : 'Play'}
-                      </button>
-                    ) : song.link ? (
-                      <a href={song.link} target="_blank" rel="noopener noreferrer" className="text-[11px] text-wattle/70 hover:text-wattle transition-colors shrink-0">
-                        Listen →
-                      </a>
-                    ) : null}
-                  </div>
-                  {/* Inline YouTube player */}
-                  {isPlaying && hasEmbed && (
-                    <div className="mt-2 ml-7">
-                      <YouTubeEmbed url={song.link} title={song.title} />
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            {songs.map((song, i) => (
+              <SongPlayer key={i} artist={song.artist} title={song.title} link={song.link} />
+            ))}
           </div>
         </div>
       )}
