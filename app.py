@@ -497,5 +497,71 @@ def process():
         progress_state["status"] = f"Error: {str(e)}"
         return jsonify({'error': str(e)})
 
+@app.route('/chat', methods=['POST'])
+def chat():
+    """Chatbot endpoint — answers questions about analysis results."""
+    try:
+        data = request.get_json()
+        user_message = data.get('message', '')
+        results_context = data.get('context', {})
+        history = data.get('history', [])[-10:]  # keep last 10 messages
+
+        # Build context summary from results
+        ctx_parts = []
+        if results_context:
+            ctx_parts.append(f"Primary Emotion: {results_context.get('fused_emotion', 'N/A')}")
+            ctx_parts.append(f"Audio Emotion: {results_context.get('audio_emotion', 'N/A')}")
+            ctx_parts.append(f"Video Emotion: {results_context.get('video_emotion', 'N/A')}")
+            ctx_parts.append(f"Confidence: {results_context.get('timeline_confidence', 'N/A')}")
+            ctx_parts.append(f"Stability: {results_context.get('emotional_stability', 'N/A')}")
+            ctx_parts.append(f"Reasoning: {results_context.get('reasoning', 'N/A')}")
+            if results_context.get('audio_temporal'):
+                ctx_parts.append(f"Audio Timeline: {', '.join(results_context['audio_temporal'])}")
+            if results_context.get('video_temporal'):
+                ctx_parts.append(f"Video Timeline: {', '.join(results_context['video_temporal'])}")
+            if results_context.get('emotion_distribution'):
+                ctx_parts.append(f"Distribution: {json.dumps(results_context['emotion_distribution'])}")
+
+        context_str = '\n'.join(ctx_parts) if ctx_parts else 'No analysis results available yet.'
+
+        # Build messages for Groq
+        messages = [
+            {"role": "system", "content": f"""You are EmotionAI Assistant — a helpful chatbot for the EmotionAI multimodal emotion recognition system. 
+You have access to the user's emotion analysis results:
+
+{context_str}
+
+Rules:
+- Keep answers SHORT and CRISP (2-3 sentences max)
+- Be specific — reference actual data from the analysis
+- If asked about emotions, use the temporal data and distribution
+- If no results available, explain that the user should run an analysis first
+- Be empathetic and supportive"""}
+        ]
+
+        # Add conversation history
+        for msg in history:
+            messages.append({"role": msg.get("role", "user"), "content": msg.get("content", "")})
+
+        messages.append({"role": "user", "content": user_message})
+
+        headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
+        payload = {
+            "model": "llama-3.3-70b-versatile",
+            "messages": messages,
+            "temperature": 0.7,
+            "max_tokens": 200
+        }
+        response = requests.post(GROQ_URL, headers=headers, json=payload)
+        if response.status_code == 200:
+            content = response.json()['choices'][0]['message']['content']
+            return jsonify({'reply': content.strip()})
+        else:
+            return jsonify({'reply': 'Sorry, I couldn\'t process that right now. Please try again.'})
+
+    except Exception as e:
+        print(f"Chat error: {e}")
+        return jsonify({'reply': 'Something went wrong. Please try again.'})
+
 if __name__ == '__main__':
     app.run(debug=True)

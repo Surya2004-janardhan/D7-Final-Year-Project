@@ -1,4 +1,4 @@
-import { BrainCircuit, Activity, TrendingDown, ArrowRight, Zap } from 'lucide-react';
+import { BrainCircuit, Activity, TrendingDown, ArrowRight, Zap, Waves, Eye, Gauge, HeartPulse, Shield } from 'lucide-react';
 
 const EMOTIONS = ['neutral', 'happy', 'sad', 'angry', 'fearful', 'disgust', 'surprised'];
 const EMOTION_EMOJI = {
@@ -6,133 +6,219 @@ const EMOTION_EMOJI = {
   neutral: '😐', surprised: '😲', disgust: '🤢',
 };
 
-function Gauge({ value, label, icon: Icon, max = 1 }) {
+// Valence mapping: negative to positive (-1 to +1)
+const VALENCE = { happy: 0.9, surprised: 0.4, neutral: 0.0, sad: -0.6, fearful: -0.5, disgust: -0.7, angry: -0.8 };
+// Arousal mapping: calm to excited (0 to 1)
+const AROUSAL = { neutral: 0.1, sad: 0.2, disgust: 0.4, happy: 0.6, fearful: 0.7, surprised: 0.8, angry: 0.9 };
+
+function ProgressGauge({ value, label, icon: Icon, max = 1, color }) {
   const pct = Math.round((value / max) * 100);
   return (
     <div className="flex items-center gap-3">
-      <Icon className="w-4 h-4 text-wattle shrink-0" />
+      <Icon className="w-4 h-4 shrink-0" style={{ color: color || '#D5CF2F' }} />
       <div className="flex-1 min-w-0">
         <div className="flex justify-between items-center mb-1">
           <span className="text-xs text-text-secondary font-medium">{label}</span>
-          <span className="text-xs text-wattle font-semibold tabular-nums">{pct}%</span>
+          <span className="text-xs font-semibold tabular-nums" style={{ color: color || '#D5CF2F' }}>{pct}%</span>
         </div>
         <div className="h-1.5 rounded-full bg-cherry-dark overflow-hidden">
-          <div className="h-full rounded-full bg-gradient-to-r from-wattle-dark to-wattle transition-all duration-700" style={{ width: `${pct}%` }} />
+          <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: `linear-gradient(90deg, ${color || '#b5b020'}, ${color || '#D5CF2F'})` }} />
         </div>
       </div>
     </div>
   );
 }
 
-function analyzeEmotionalJourney(results) {
-  const temporal = results.video_temporal || results.audio_temporal || [];
+function computeAdvancedMetrics(results) {
+  const audioTemporal = results.audio_temporal || [];
+  const videoTemporal = results.video_temporal || [];
+  const temporal = videoTemporal.length > 0 ? videoTemporal : audioTemporal;
   if (temporal.length < 2) return null;
 
-  // Count transitions and detect journey arc
-  const transitions = [];
-  for (let i = 1; i < temporal.length; i++) {
-    if (temporal[i] !== temporal[i - 1]) {
-      transitions.push({ from: temporal[i - 1], to: temporal[i], at: i });
+  const metrics = {};
+
+  // ── 1. Valence Trajectory ────────────────────────────
+  const valenceArr = temporal.map(e => VALENCE[e] ?? 0);
+  const avgValence = valenceArr.reduce((s, v) => s + v, 0) / valenceArr.length;
+  const valenceStart = valenceArr.slice(0, Math.ceil(valenceArr.length / 3)).reduce((s, v) => s + v, 0) / Math.ceil(valenceArr.length / 3);
+  const valenceEnd = valenceArr.slice(-Math.ceil(valenceArr.length / 3)).reduce((s, v) => s + v, 0) / Math.ceil(valenceArr.length / 3);
+  const valenceShift = valenceEnd - valenceStart;
+
+  if (valenceShift > 0.2) metrics.valenceTrajectory = { direction: 'Ascending', desc: 'Emotional state improved over time — moved toward positive valence', score: Math.min(1, (valenceEnd + 1) / 2) };
+  else if (valenceShift < -0.2) metrics.valenceTrajectory = { direction: 'Descending', desc: 'Emotional valence declined — shifted toward negative sentiment', score: Math.max(0, (valenceEnd + 1) / 2) };
+  else metrics.valenceTrajectory = { direction: 'Stable', desc: `Emotional valence remained ${avgValence > 0.2 ? 'positive' : avgValence < -0.2 ? 'negative' : 'neutral'} throughout`, score: (avgValence + 1) / 2 };
+
+  // ── 2. Arousal Arc ───────────────────────────────────
+  const arousalArr = temporal.map(e => AROUSAL[e] ?? 0.3);
+  const avgArousal = arousalArr.reduce((s, v) => s + v, 0) / arousalArr.length;
+  const peakArousal = Math.max(...arousalArr);
+  const peakIdx = arousalArr.indexOf(peakArousal);
+  const peakPosition = peakIdx < temporal.length * 0.33 ? 'early' : peakIdx > temporal.length * 0.66 ? 'late' : 'mid-session';
+  metrics.arousal = { avg: avgArousal, peak: peakArousal, peakAt: peakPosition, emotion: temporal[peakIdx] };
+
+  // ── 3. Audio-Visual Coherence ────────────────────────
+  if (audioTemporal.length > 0 && videoTemporal.length > 0) {
+    const minLen = Math.min(audioTemporal.length, videoTemporal.length);
+    let matches = 0;
+    for (let i = 0; i < minLen; i++) {
+      if (audioTemporal[i] === videoTemporal[i]) matches++;
+    }
+    const coherence = matches / minLen;
+    metrics.avCoherence = {
+      score: coherence,
+      desc: coherence > 0.7 ? 'Voice and facial expressions are highly aligned — authentic emotional expression'
+           : coherence > 0.4 ? 'Moderate alignment between voice and face — possible mixed emotions'
+           : 'Low audio-visual alignment — voice and facial cues tell different stories (possible masking)'
+    };
+  }
+
+  // ── 4. Emotional Regulation Index ────────────────────
+  // How quickly do high-arousal states return to baseline?
+  let recoverySum = 0, recoveryCount = 0;
+  for (let i = 1; i < arousalArr.length; i++) {
+    if (arousalArr[i - 1] > 0.6 && arousalArr[i] < arousalArr[i - 1]) {
+      recoverySum += (arousalArr[i - 1] - arousalArr[i]);
+      recoveryCount++;
     }
   }
+  const regulationScore = recoveryCount > 0 ? Math.min(1, recoverySum / recoveryCount / 0.5) : (avgArousal < 0.4 ? 0.9 : 0.5);
+  metrics.regulation = { score: regulationScore };
 
-  // Detect dominant emotion in first half vs second half
+  // ── 5. Micro-expression Patterns ─────────────────────
+  let rapidShifts = 0;
+  for (let i = 2; i < temporal.length; i++) {
+    if (temporal[i] === temporal[i - 2] && temporal[i] !== temporal[i - 1]) {
+      rapidShifts++; // A→B→A pattern = micro-expression
+    }
+  }
+  metrics.microExpressions = { count: rapidShifts };
+
+  // ── 6. Emotional Journey Insights ────────────────────
   const mid = Math.floor(temporal.length / 2);
-  const firstHalf = temporal.slice(0, mid);
-  const secondHalf = temporal.slice(mid);
-
-  const count = (arr) => {
-    const c = {};
-    arr.forEach(e => { c[e] = (c[e] || 0) + 1; });
-    return Object.entries(c).sort((a, b) => b[1] - a[1]);
-  };
-
-  const firstDom = count(firstHalf)[0];
-  const secondDom = count(secondHalf)[0];
-
-  // Detect emotional volatility
-  const uniqueEmotions = new Set(temporal).size;
-  const volatilityLevel = uniqueEmotions <= 2 ? 'Low' : uniqueEmotions <= 4 ? 'Moderate' : 'High';
-
-  // Build insights
-  const insights = [];
-
-  // Journey arc
-  if (firstDom && secondDom && firstDom[0] !== secondDom[0]) {
-    insights.push({
-      icon: ArrowRight,
-      label: 'Emotional Journey',
-      text: `Started ${firstDom[0]} ${EMOTION_EMOJI[firstDom[0]] || ''} → shifted to ${secondDom[0]} ${EMOTION_EMOJI[secondDom[0]] || ''} over the recording`,
-    });
-  } else if (firstDom) {
-    insights.push({
-      icon: Activity,
-      label: 'Emotional Consistency',
-      text: `Maintained ${firstDom[0]} ${EMOTION_EMOJI[firstDom[0]] || ''} throughout — a stable emotional baseline`,
-    });
+  const count = (arr) => { const c = {}; arr.forEach(e => c[e] = (c[e] || 0) + 1); return Object.entries(c).sort((a, b) => b[1] - a[1]); };
+  const firstDom = count(temporal.slice(0, mid))[0];
+  const secondDom = count(temporal.slice(mid))[0];
+  
+  const transitions = [];
+  for (let i = 1; i < temporal.length; i++) {
+    if (temporal[i] !== temporal[i - 1]) transitions.push({ from: temporal[i - 1], to: temporal[i], at: i });
   }
 
-  // Key transitions
-  if (transitions.length > 0) {
-    const keyShift = transitions[0];
-    insights.push({
-      icon: Zap,
-      label: `${transitions.length} Transition${transitions.length > 1 ? 's' : ''} Detected`,
-      text: `First shift: ${keyShift.from} → ${keyShift.to} at segment ${keyShift.at + 1}. Volatility: ${volatilityLevel} (${uniqueEmotions} unique emotions)`,
-    });
-  }
+  metrics.journey = { firstDom, secondDom, transitions, uniqueEmotions: new Set(temporal).size };
 
-  // Emotion distribution summary
-  const dist = results.emotion_distribution || {};
-  const topTwo = Object.entries(dist).sort((a, b) => b[1] - a[1]).slice(0, 2);
-  if (topTwo.length >= 2) {
-    const total = Object.values(dist).reduce((s, v) => s + v, 0);
-    insights.push({
-      icon: BrainCircuit,
-      label: 'Emotion Spectrum',
-      text: `Dominant: ${topTwo[0][0]} (${Math.round(topTwo[0][1] / total * 100)}%) with ${topTwo[1][0]} (${Math.round(topTwo[1][1] / total * 100)}%) as secondary`,
-    });
-  }
-
-  return insights;
+  return metrics;
 }
 
 export default function CognitiveInsights({ results }) {
   if (!results) return null;
-  const journey = analyzeEmotionalJourney(results);
+  const m = computeAdvancedMetrics(results);
 
   return (
     <div className="max-w-2xl mx-auto glass glow-border rounded-2xl p-6 space-y-5 animate-fade-up" style={{ animationDelay: '0.15s' }}>
       <h3 className="text-sm font-semibold text-text-primary flex items-center gap-2">
         <BrainCircuit className="w-4 h-4 text-wattle" />
-        Cognitive Analysis
+        Cognitive Analysis Engine
+        <span className="text-[9px] text-text-muted font-normal ml-auto">Temporal AI</span>
       </h3>
 
-      {/* Gauges */}
+      {/* Core Gauges */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Gauge value={results.timeline_confidence ?? 0} label="Confidence" icon={Activity} />
-        <Gauge value={results.emotional_stability ?? 0} label="Stability" icon={BrainCircuit} />
-        <Gauge value={1 - (results.transition_rate ?? 0)} label="Consistency" icon={TrendingDown} />
+        <ProgressGauge value={results.timeline_confidence ?? 0} label="Model Confidence" icon={Activity} color="#D5CF2F" />
+        <ProgressGauge value={results.emotional_stability ?? 0} label="Emotional Stability" icon={HeartPulse} color="#22C55E" />
+        <ProgressGauge value={1 - (results.transition_rate ?? 0)} label="Signal Consistency" icon={Shield} color="#3B82F6" />
       </div>
 
-      {/* Deep insights from temporal data */}
-      {journey && journey.length > 0 && (
-        <div className="space-y-3 pt-3" style={{ borderTop: '1px solid rgba(213,207,47,0.1)' }}>
-          {journey.map((item, i) => (
-            <div key={i} className="flex items-start gap-3">
-              <item.icon className="w-3.5 h-3.5 text-wattle mt-0.5 shrink-0" />
-              <div>
-                <span className="text-xs text-wattle font-semibold">{item.label}</span>
-                <p className="text-xs text-text-secondary leading-relaxed mt-0.5">{item.text}</p>
+      {m && (
+        <>
+          {/* Dotted separator */}
+          <div style={{ borderTop: '1px dotted rgba(213,207,47,0.12)' }} />
+
+          {/* Advanced Metrics */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Valence Trajectory */}
+            {m.valenceTrajectory && (
+              <div className="flex items-start gap-2.5">
+                <Waves className="w-3.5 h-3.5 text-wattle mt-0.5 shrink-0" />
+                <div>
+                  <span className="text-[11px] text-wattle font-semibold">Valence: {m.valenceTrajectory.direction}</span>
+                  <p className="text-[10px] text-text-secondary leading-relaxed mt-0.5">{m.valenceTrajectory.desc}</p>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            )}
+
+            {/* Arousal Arc */}
+            {m.arousal && (
+              <div className="flex items-start gap-2.5">
+                <Zap className="w-3.5 h-3.5 text-wattle mt-0.5 shrink-0" />
+                <div>
+                  <span className="text-[11px] text-wattle font-semibold">Arousal Peak: {m.arousal.peakAt}</span>
+                  <p className="text-[10px] text-text-secondary leading-relaxed mt-0.5">
+                    Peak intensity ({Math.round(m.arousal.peak * 100)}%) detected {m.arousal.peakAt} during {m.arousal.emotion} {EMOTION_EMOJI[m.arousal.emotion] || ''}. Avg arousal: {Math.round(m.arousal.avg * 100)}%.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* AV Coherence */}
+            {m.avCoherence && (
+              <div className="flex items-start gap-2.5">
+                <Eye className="w-3.5 h-3.5 text-wattle mt-0.5 shrink-0" />
+                <div>
+                  <span className="text-[11px] text-wattle font-semibold">AV Coherence: {Math.round(m.avCoherence.score * 100)}%</span>
+                  <p className="text-[10px] text-text-secondary leading-relaxed mt-0.5">{m.avCoherence.desc}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Emotional Regulation */}
+            {m.regulation && (
+              <div className="flex items-start gap-2.5">
+                <Gauge className="w-3.5 h-3.5 text-wattle mt-0.5 shrink-0" />
+                <div>
+                  <span className="text-[11px] text-wattle font-semibold">Regulation Index: {Math.round(m.regulation.score * 100)}%</span>
+                  <p className="text-[10px] text-text-secondary leading-relaxed mt-0.5">
+                    {m.regulation.score > 0.7 ? 'Strong emotional regulation — quick recovery from high-arousal states' 
+                     : m.regulation.score > 0.4 ? 'Moderate regulation — some latency returning to baseline'
+                     : 'Low regulation — sustained high-arousal without recovery periods'}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Emotional Journey + Micro-expressions */}
+          <div style={{ borderTop: '1px dotted rgba(213,207,47,0.08)' }} />
+          <div className="space-y-2.5">
+            {/* Journey arc */}
+            {m.journey.firstDom && m.journey.secondDom && (
+              <div className="flex items-start gap-2.5">
+                <ArrowRight className="w-3.5 h-3.5 text-wattle mt-0.5 shrink-0" />
+                <p className="text-[10px] text-text-secondary leading-relaxed">
+                  <span className="text-wattle font-semibold">Emotional Arc:</span>{' '}
+                  {m.journey.firstDom[0] !== m.journey.secondDom[0]
+                    ? `Transitioned from ${m.journey.firstDom[0]} ${EMOTION_EMOJI[m.journey.firstDom[0]] || ''} → ${m.journey.secondDom[0]} ${EMOTION_EMOJI[m.journey.secondDom[0]] || ''} across ${m.journey.transitions.length} shift${m.journey.transitions.length !== 1 ? 's' : ''} (${m.journey.uniqueEmotions} unique states)`
+                    : `Consistently ${m.journey.firstDom[0]} ${EMOTION_EMOJI[m.journey.firstDom[0]] || ''} with ${m.journey.uniqueEmotions} unique emotional state${m.journey.uniqueEmotions !== 1 ? 's' : ''} detected`}
+                </p>
+              </div>
+            )}
+
+            {/* Micro-expressions */}
+            {m.microExpressions.count > 0 && (
+              <div className="flex items-start gap-2.5">
+                <BrainCircuit className="w-3.5 h-3.5 text-wattle mt-0.5 shrink-0" />
+                <p className="text-[10px] text-text-secondary leading-relaxed">
+                  <span className="text-wattle font-semibold">Micro-expressions:</span>{' '}
+                  {m.microExpressions.count} rapid A→B→A pattern{m.microExpressions.count > 1 ? 's' : ''} detected — indicates brief involuntary emotional leakage, a signal conventional models typically miss.
+                </p>
+              </div>
+            )}
+          </div>
+        </>
       )}
 
       {/* Reasoning */}
       {results.reasoning && (
-        <p className="text-xs text-text-muted leading-relaxed pt-3 italic" style={{ borderTop: '1px solid rgba(213,207,47,0.06)' }}>
+        <p className="text-[10px] text-text-muted leading-relaxed pt-3 italic" style={{ borderTop: '1px solid rgba(213,207,47,0.06)' }}>
           {results.reasoning}
         </p>
       )}

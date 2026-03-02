@@ -207,6 +207,13 @@ export default function RecordingPanel({
               </p>
             </div>
           )}
+
+          {/* Bias note */}
+          <div className="px-4 pb-3">
+            <p className="text-[10px] text-text-muted text-center leading-relaxed">
+              ⚠ Results may not be 100% accurate due to camera quality, lighting conditions, and environmental factors. The system may show bias.
+            </p>
+          </div>
         </div>
       )}
 

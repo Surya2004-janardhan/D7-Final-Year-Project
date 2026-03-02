@@ -8,6 +8,7 @@ export default defineConfig({
     proxy: {
       '/process': 'http://localhost:5000',
       '/status': 'http://localhost:5000',
+      '/chat': 'http://localhost:5000',
     },
   },
 })

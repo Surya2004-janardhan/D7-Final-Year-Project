@@ -6,14 +6,16 @@ import EmotionCards from './components/EmotionCards';
 import TemporalChart from './components/TemporalChart';
 import CognitiveInsights from './components/CognitiveInsights';
 import AIContent from './components/AIContent';
+import Chatbot from './components/Chatbot';
 import useMediaRecorder from './hooks/useMediaRecorder';
 import useProcessing from './hooks/useProcessing';
-import { Brain, RotateCcw } from 'lucide-react';
+import { Brain, RotateCcw, Info, AlertTriangle } from 'lucide-react';
 
 export default function App() {
   const recorder = useMediaRecorder();
   const processing = useProcessing();
   const [phase, setPhase] = useState('idle');
+  const [chatOpen, setChatOpen] = useState(false);
 
   const handleAnalyze = async (input, type) => {
     setPhase('processing');
@@ -29,11 +31,11 @@ export default function App() {
 
   return (
     <div className="min-h-screen pb-16">
-      <Navbar />
+      <Navbar chatOpen={chatOpen} onToggleChat={() => setChatOpen(!chatOpen)} />
       <div className="h-14" />
 
       {/* Hero */}
-      <header className="text-center pt-10 pb-8 px-4">
+      <header className="text-center pt-10 pb-6 px-4">
         <div className="inline-flex items-center gap-2 mb-3">
           <Brain className="w-5 h-5 text-wattle animate-float" />
           <span className="text-xs font-medium text-wattle/70 uppercase tracking-widest">
@@ -46,6 +48,19 @@ export default function App() {
         <p className="mt-2 text-sm text-text-muted max-w-md mx-auto">
           Upload a video - our AI analyzes audio & visual cues to understand your emotional state.
         </p>
+
+        {/* Accuracy note */}
+        <div className="mt-4 max-w-xl mx-auto space-y-2">
+          <p className="text-[11px] text-text-muted flex items-center justify-center gap-1.5 flex-wrap">
+            <Info className="w-3 h-3 text-wattle/50 shrink-0" />
+            System accuracy may vary — trained on 25GB of data. Results are indicative, not diagnostic.
+          </p>
+          <p className="text-[11px] text-text-muted leading-relaxed max-w-lg mx-auto">
+            The goal of this project is to make machines understand humans in various scenarios.
+            The base model can be used for several use cases like HR screening rounds, therapy session analysis,
+            customer sentiment monitoring, interview assessment, and more.
+          </p>
+        </div>
       </header>
 
       <main className="px-4 space-y-6">
@@ -88,8 +103,11 @@ export default function App() {
         )}
       </main>
 
+      {/* Chatbot */}
+      <Chatbot results={processing.results} isOpen={chatOpen} onClose={() => setChatOpen(false)} />
+
       <footer className="mt-16 text-center pb-6">
-        <p className="text-xs text-text-muted">EmotionAI · Multimodal Emotion Recognition System</p>
+        <p className="text-xs text-text-muted">EmotionAI · Multimodal Emotion Recognition System · Team D7</p>
       </footer>
     </div>
   );
