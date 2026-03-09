@@ -54,8 +54,6 @@ export default function App() {
         {/* Accuracy note */}
         <div className="mt-4 max-w-xl mx-auto space-y-2">
           <p className="text-[11px] text-text-muted flex items-center justify-center gap-1.5 flex-wrap">
-            <Info className="w-3 h-3 text-wattle/50 shrink-0" />
-            System accuracy may vary as the model is trained on 25GB of data. Results are indicative, not diagnostic.
           </p>
           <p className="text-[11px] text-text-muted leading-relaxed max-w-lg mx-auto font-bold">
             The goal of this project is to make machines understand humans in various scenarios.
