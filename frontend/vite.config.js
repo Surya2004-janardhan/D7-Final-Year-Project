@@ -10,6 +10,7 @@ export default defineConfig({
       '/status': 'http://localhost:5000',
       '/chat': 'http://localhost:5000',
       '/music': 'http://localhost:5000',
+      '/downloaded_music': 'http://localhost:5000',
     },
   },
 })
