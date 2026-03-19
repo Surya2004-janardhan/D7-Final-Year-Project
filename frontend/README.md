@@ -1,16 +1,49 @@
-# React + Vite
+# EmotionAI Frontend (React + Electron)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This folder contains the desktop client UI and Electron runtime shell used by EmotionAI.
 
-Currently, two official plugins are available:
+## What Is Here
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- React renderer app (`src/`) for:
+  - Dashboard (manual recording/upload + result cards/charts)
+  - History/Calendar analytics
+  - Settings (auto mode, interval, recording duration, intervention mapping)
+  - Chat assistant panel
+- Electron main process (`main.cjs`) for:
+  - Tray lifecycle
+  - Backend child-process control (`python app.py`)
+  - Native notifications
+  - Persistent local storage via userData files
 
-## React Compiler
+## Scripts
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```bash
+npm run build          # Build Vite bundle to dist/
+npm run preview        # Preview built frontend
+npm run lint           # Lint React code
+npm run electron:dist  # Launch Electron app
+```
 
-## Expanding the ESLint configuration
+Note: `electron:start` exists but expects a `dev` script that is currently not defined.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Runtime Integration
+
+- Renderer sets API base URL to Flask: `http://localhost:5000`
+- Vite proxy is configured for backend routes in `vite.config.js`
+- Electron IPC is used for settings/history/cache and backend lifecycle
+
+## Persistent Files (Electron userData)
+
+- `settings.json`
+- `results.json`
+- `analyses/*.json`
+
+## Main Files
+
+- `main.cjs`: Electron main process and IPC handlers
+- `src/App.jsx`: top-level app shell and tabs
+- `src/hooks/useDaemon.js`: auto-mode background monitor
+- `src/hooks/useProcessing.js`: `/process` + `/status` workflow
+- `src/components/CalendarView.jsx`: historical analytics + AI trend analysis
+
+For complete backend architecture and API contracts, see the root README.
