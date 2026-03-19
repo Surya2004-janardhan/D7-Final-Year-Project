@@ -93,7 +93,7 @@ export default function SettingsView({ settings, onSave }) {
         {/* Notification Style */}
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-semibold text-text-primary">When emotional shift is detected</p>
+            <p className="text-sm font-semibold text-text-primary">When an emotional shift is estimated</p>
             <p className="text-xs text-text-muted">Controls how the stress-support popup and music behave</p>
           </div>
           <select

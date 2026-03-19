@@ -35,7 +35,7 @@ export default function InterventionPopup({ results }) {
               <div>
                 <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">Stress Support Layer</p>
                 <h3 className="text-sm sm:text-base font-black text-text-primary">
-                  {results.stress_label ? `${results.stress_label[0].toUpperCase()}${results.stress_label.slice(1)} stress pattern detected` : 'New well-being suggestion ready'}
+                  {results.stress_label ? `${results.stress_label[0].toUpperCase()}${results.stress_label.slice(1)} stress pattern estimated` : 'New well-being suggestion ready'}
                 </h3>
                 <p className="text-xs text-text-secondary mt-1">
                   Current emotion trend: <span className="font-bold capitalize text-text-primary">{results.fused_emotion || 'neutral'}</span>

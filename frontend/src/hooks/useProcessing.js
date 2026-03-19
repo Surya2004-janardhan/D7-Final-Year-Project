@@ -9,10 +9,10 @@ export default function useProcessing() {
   const [error, setError] = useState(null);
   const pollRef = useRef(null);
 
-  const startPolling = useCallback(() => {
+  const startPolling = useCallback((jobId) => {
     pollRef.current = setInterval(async () => {
       try {
-        const { data } = await axios.get('/status');
+        const { data } = await axios.get(`/status?job_id=${encodeURIComponent(jobId)}`);
         setProgress(data.progress || 0);
         setStatus(data.status || '');
         if (data.progress >= 100) {
@@ -31,10 +31,12 @@ export default function useProcessing() {
     setResults(null);
     setError(null);
 
+    const jobId = globalThis.crypto?.randomUUID?.() || `job-${Date.now()}`;
     const formData = new FormData();
     formData.append('video', blob, 'recording.webm');
+    formData.append('job_id', jobId);
 
-    startPolling();
+    startPolling(jobId);
 
     try {
       const { data } = await axios.post('/process', formData, {
@@ -66,10 +68,12 @@ export default function useProcessing() {
     setResults(null);
     setError(null);
 
+    const jobId = globalThis.crypto?.randomUUID?.() || `job-${Date.now()}`;
     const formData = new FormData();
     formData.append('video', file);
+    formData.append('job_id', jobId);
 
-    startPolling();
+    startPolling(jobId);
 
     try {
       const { data } = await axios.post('/process', formData, {

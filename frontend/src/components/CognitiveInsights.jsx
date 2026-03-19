@@ -52,7 +52,7 @@ function computeAdvancedMetrics(results) {
   const valenceEnd = valenceArr.slice(-Math.ceil(valenceArr.length / 3)).reduce((s, v) => s + v, 0) / Math.ceil(valenceArr.length / 3);
   const valenceShift = valenceEnd - valenceStart;
 
-  if (valenceShift > 0.2) metrics.valenceTrajectory = { direction: 'Ascending', desc: 'Positive emotional transition detected — valence levels increased significantly.', score: Math.min(1, (valenceEnd + 1) / 2) };
+  if (valenceShift > 0.2) metrics.valenceTrajectory = { direction: 'Ascending', desc: 'Positive emotional transition appears likely because valence rose across the session.', score: Math.min(1, (valenceEnd + 1) / 2) };
   else if (valenceShift < -0.2) metrics.valenceTrajectory = { direction: 'Descending', desc: 'Negative emotional drift noted — valence levels softened toward the end.', score: Math.max(0, (valenceEnd + 1) / 2) };
   else metrics.valenceTrajectory = { direction: 'Stable', desc: `Valence baseline remained ${avgValence > 0.2 ? 'optimistic' : avgValence < -0.2 ? 'attenuated' : 'balanced'} throughout.`, score: (avgValence + 1) / 2 };
 
@@ -76,7 +76,7 @@ function computeAdvancedMetrics(results) {
       score: coherence,
       desc: coherence > 0.7 ? 'Strong multimodal synchronization — high expressive transparency.'
            : coherence > 0.4 ? 'Moderate modality variance — presence of complex, layered emotional states.'
-           : 'Significant modality divergence — potential internal emotional processing detected.'
+           : 'Significant modality divergence — this may reflect layered internal emotional processing.'
     };
   }
 
@@ -183,7 +183,7 @@ export default function CognitiveInsights({ results }) {
                   <span className="text-[10px] text-text-muted font-bold uppercase tracking-widest">Intensity Peak</span>
                   <p className="text-xs font-semibold text-text-primary mt-1 mb-0.5">{Math.round(m.arousal.peak * 100)}% Momentum</p>
                   <p className="text-[10px] text-text-secondary leading-normal">
-                    Maximum arousal detected in {m.arousal.peakAt} as {m.arousal.emotion} {EMOTION_EMOJI[m.arousal.emotion]}.
+                    Maximum arousal appeared in {m.arousal.peakAt} as {m.arousal.emotion} {EMOTION_EMOJI[m.arousal.emotion]}.
                   </p>
                 </div>
               </div>

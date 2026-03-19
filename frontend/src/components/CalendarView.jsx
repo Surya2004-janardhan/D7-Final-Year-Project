@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { CalendarRange, Sparkles, Brain, TrendingUp, TrendingDown, Clock } from 'lucide-react';
+import { CalendarRange, Sparkles, Brain, TrendingUp, TrendingDown, Clock, Activity, BarChart3 } from 'lucide-react';
 import axios from 'axios';
 
 const ipc = typeof window !== 'undefined' && window.require
@@ -13,6 +13,15 @@ const EMOTION_COLORS = {
 };
 const POSITIVE = ['happy', 'neutral', 'surprised'];
 const NEGATIVE = ['sad', 'angry', 'fearful', 'disgust'];
+const STRESS_BASELINE = {
+  happy: 0.15,
+  neutral: 0.25,
+  surprised: 0.45,
+  sad: 0.65,
+  disgust: 0.70,
+  fearful: 0.80,
+  angry: 0.85,
+};
 
 const RANGES = [
   { id: 'today', label: 'Today' },
@@ -79,6 +88,18 @@ export default function CalendarView() {
     return Object.entries(freq).sort((a, b) => b[1] - a[1])[0][0];
   };
 
+  const estimateRowStress = useCallback((row) => {
+    if (typeof row.stress_score === 'number') return row.stress_score;
+    const baseline = STRESS_BASELINE[row.fused_emotion] ?? 0.35;
+    const transition = typeof row.transition_rate === 'number' ? row.transition_rate : 0.25;
+    const stability = typeof row.stability === 'number'
+      ? row.stability
+      : typeof row.emotional_stability === 'number'
+      ? row.emotional_stability
+      : 0.65;
+    return Math.max(0, Math.min(1, baseline + (0.2 * transition) + (0.1 * (1 - stability))));
+  }, []);
+
   // Summary stats
   const summary = useMemo(() => {
     const ems = filtered.map(r => r.fused_emotion);
@@ -88,6 +109,67 @@ export default function CalendarView() {
     const posRatio = pos / ems.length;
     return { total: ems.length, pos, neg, posRatio };
   }, [filtered]);
+
+  const stressMetrics = useMemo(() => {
+    if (!filtered.length) return null;
+
+    const withStress = filtered.map((row) => ({
+      ...row,
+      derivedStress: estimateRowStress(row),
+    }));
+
+    const avgStress = withStress.reduce((sum, row) => sum + row.derivedStress, 0) / withStress.length;
+    const sortedChrono = [...withStress].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    const split = Math.max(1, Math.floor(sortedChrono.length / 2));
+    const firstHalf = sortedChrono.slice(0, split);
+    const secondHalf = sortedChrono.slice(split);
+    const firstAvg = firstHalf.reduce((sum, row) => sum + row.derivedStress, 0) / firstHalf.length;
+    const secondAvg = secondHalf.length
+      ? secondHalf.reduce((sum, row) => sum + row.derivedStress, 0) / secondHalf.length
+      : firstAvg;
+    const trendDelta = secondAvg - firstAvg;
+
+    const hourBuckets = Array.from({ length: 24 }, (_, hour) => ({ hour, values: [] }));
+    const dayBuckets = {};
+
+    withStress.forEach((row) => {
+      const timestamp = new Date(row.timestamp);
+      hourBuckets[timestamp.getHours()].values.push(row.derivedStress);
+      const dayKey = timestamp.toLocaleDateString();
+      if (!dayBuckets[dayKey]) dayBuckets[dayKey] = [];
+      dayBuckets[dayKey].push(row.derivedStress);
+    });
+
+    const peakHourEntry = hourBuckets
+      .filter(({ values }) => values.length > 0)
+      .map(({ hour, values }) => ({
+        hour,
+        avg: values.reduce((sum, value) => sum + value, 0) / values.length,
+      }))
+      .sort((a, b) => b.avg - a.avg)[0] || null;
+
+    const peakDayEntry = Object.entries(dayBuckets)
+      .map(([day, values]) => ({
+        day,
+        avg: values.reduce((sum, value) => sum + value, 0) / values.length,
+      }))
+      .sort((a, b) => b.avg - a.avg)[0] || null;
+
+    const dayTrend = Object.entries(dayBuckets)
+      .map(([day, values]) => ({
+        day,
+        avg: values.reduce((sum, value) => sum + value, 0) / values.length,
+      }))
+      .sort((a, b) => new Date(a.day) - new Date(b.day));
+
+    return {
+      avgStress,
+      trendDelta,
+      peakHourEntry,
+      peakDayEntry,
+      dayTrend,
+    };
+  }, [filtered, estimateRowStress]);
 
   // Key to cache analysis per range+date
   const cacheKey = `${range}_${new Date().toISOString().slice(0, 10)}`;
@@ -200,6 +282,54 @@ export default function CalendarView() {
         </div>
       )}
 
+      {stressMetrics && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          <div className="panel p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Activity className="w-4 h-4 text-primary" />
+              <span className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Average Stress</span>
+            </div>
+            <p className="text-2xl font-black text-text-primary">{Math.round(stressMetrics.avgStress * 100)}%</p>
+            <p className="text-xs text-text-muted mt-1">Estimated support score across this range.</p>
+          </div>
+
+          <div className="panel p-4">
+            <div className="flex items-center gap-2 mb-2">
+              {stressMetrics.trendDelta <= 0 ? <TrendingDown className="w-4 h-4 text-green-600" /> : <TrendingUp className="w-4 h-4 text-red-500" />}
+              <span className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Trend Shift</span>
+            </div>
+            <p className={`text-2xl font-black ${stressMetrics.trendDelta <= 0 ? 'text-green-600' : 'text-red-500'}`}>
+              {stressMetrics.trendDelta <= 0 ? 'Easing' : 'Rising'}
+            </p>
+            <p className="text-xs text-text-muted mt-1">
+              {Math.abs(Math.round(stressMetrics.trendDelta * 100))}% change from earlier to later readings.
+            </p>
+          </div>
+
+          <div className="panel p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Clock className="w-4 h-4 text-primary" />
+              <span className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Peak Hour</span>
+            </div>
+            <p className="text-2xl font-black text-text-primary">
+              {stressMetrics.peakHourEntry ? `${stressMetrics.peakHourEntry.hour}:00` : '—'}
+            </p>
+            <p className="text-xs text-text-muted mt-1">Estimated highest stress window in this range.</p>
+          </div>
+
+          <div className="panel p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <BarChart3 className="w-4 h-4 text-primary" />
+              <span className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Most Intense Day</span>
+            </div>
+            <p className="text-lg font-black text-text-primary truncate">
+              {stressMetrics.peakDayEntry ? stressMetrics.peakDayEntry.day : '—'}
+            </p>
+            <p className="text-xs text-text-muted mt-1">Day with the highest estimated stress average.</p>
+          </div>
+        </div>
+      )}
+
       {/* Celebration / Encouragement Banner */}
       {summary && (
         <div className={`p-4 rounded-xl border text-sm font-medium ${
@@ -267,12 +397,35 @@ export default function CalendarView() {
         </div>
       )}
 
+      {stressMetrics && stressMetrics.dayTrend.length > 0 && (
+        <div className="panel p-6">
+          <h2 className="text-sm font-bold text-text-primary uppercase tracking-wider mb-5 flex items-center gap-2">
+            <Activity className="w-4 h-4 text-primary" />
+            Estimated Stress by Day
+          </h2>
+          <div className="space-y-3">
+            {stressMetrics.dayTrend.slice(-7).map((entry) => (
+              <div key={entry.day} className="flex items-center gap-4">
+                <div className="w-24 text-xs font-medium text-text-secondary shrink-0">{entry.day}</div>
+                <div className="flex-1 h-3 rounded-full bg-surface-raised border border-border-subtle overflow-hidden">
+                  <div
+                    className={`h-full rounded-full ${entry.avg > 0.65 ? 'bg-red-500' : entry.avg > 0.35 ? 'bg-amber-500' : 'bg-green-500'}`}
+                    style={{ width: `${Math.round(entry.avg * 100)}%` }}
+                  />
+                </div>
+                <div className="w-12 text-right text-xs font-bold text-text-primary shrink-0">{Math.round(entry.avg * 100)}%</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* LLM Analysis Result */}
       {analysisText && (
         <div className="panel p-6 border border-primary/20 bg-primary/5 animate-fade-up">
           <div className="flex items-center gap-2 mb-3">
             <Brain className="w-5 h-5 text-primary" />
-            <h3 className="text-sm font-bold text-text-primary uppercase tracking-widest">AI Stress Report</h3>
+            <h3 className="text-sm font-bold text-text-primary uppercase tracking-widest">AI Stress Summary</h3>
             {analysisDate && <span className="ml-auto text-[10px] text-text-muted">Generated {analysisDate}</span>}
           </div>
           <p className="text-sm text-text-secondary leading-relaxed whitespace-pre-wrap">{analysisText}</p>
