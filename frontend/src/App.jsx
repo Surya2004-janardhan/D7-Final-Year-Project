@@ -3,7 +3,6 @@ import useMediaRecorder from './hooks/useMediaRecorder';
 import useProcessing from './hooks/useProcessing';
 import useDaemon from './hooks/useDaemon';
 import useSettings from './hooks/useSettings';
-import axios from 'axios';
 
 import RecordingPanel from './components/RecordingPanel';
 import ProcessingLoader from './components/ProcessingLoader';
@@ -14,6 +13,7 @@ import AIContent from './components/AIContent';
 import Chatbot from './components/Chatbot';
 import CalendarView from './components/CalendarView';
 import SettingsView from './components/SettingsView';
+import InterventionPopup from './components/InterventionPopup';
 
 import { Brain, LayoutDashboard, CalendarRange, SlidersHorizontal, MessageCircle, Activity, ChevronRight, RotateCcw, AlertTriangle } from 'lucide-react';
 
@@ -32,6 +32,7 @@ export default function App() {
   const [chatKey, setChatKey] = useState(0);
   const [lastDaemonResult, setLastDaemonResult] = useState(null);
   const audioRef = useRef(null);
+  const activeInsight = processing.results || lastDaemonResult;
 
   // ── Daemon ─────────────────────────────────────────────────
   const { isDaemonActive, daemonStatus, nextFireIn, startDaemon, stopDaemon } = useDaemon({
@@ -81,9 +82,9 @@ export default function App() {
 
   // ── Sidebar nav items ─────────────────────────────────────
   const navItems = [
-    { id: 'dashboard', label: 'Dashboard',  Icon: LayoutDashboard },
-    { id: 'calendar',  label: 'History',    Icon: CalendarRange },
-    { id: 'settings',  label: 'Settings',   Icon: SlidersHorizontal },
+    { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
+    { id: 'calendar',  label: 'History', icon: <CalendarRange className="w-4 h-4" /> },
+    { id: 'settings',  label: 'Settings', icon: <SlidersHorizontal className="w-4 h-4" /> },
   ];
 
   if (!loaded) return (
@@ -97,6 +98,7 @@ export default function App() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-bg-base text-text-primary">
+      <InterventionPopup results={activeInsight} />
 
       {/* ── Sidebar ─────────────────────────────────────── */}
       <aside className="w-56 shrink-0 flex flex-col border-r border-border-subtle bg-surface-base">
@@ -112,7 +114,7 @@ export default function App() {
 
         {/* Nav links */}
         <nav className="flex-1 px-3 py-4 space-y-1">
-          {navItems.map(({ id, label, Icon }) => (
+          {navItems.map(({ id, label, icon }) => (
             <button
               key={id}
               onClick={() => setCurrentTab(id)}
@@ -123,7 +125,7 @@ export default function App() {
               }`}
             >
               <div className="flex items-center gap-3">
-                <Icon className="w-4 h-4" />
+                {icon}
                 {label}
               </div>
               {currentTab === id && <ChevronRight className="w-3.5 h-3.5 opacity-60" />}
@@ -196,7 +198,7 @@ export default function App() {
             <div className="space-y-8 animate-fade-up">
               <div>
                 <h1 className="text-2xl font-black text-text-primary">Dashboard</h1>
-                <p className="text-sm text-text-muted mt-1">Live emotional monitoring for workplace well-being.</p>
+                <p className="text-sm text-text-muted mt-1">Track emotion-driven stress patterns for workplace well-being over time.</p>
               </div>
 
               {phase === 'idle' && (
@@ -272,7 +274,7 @@ export default function App() {
       </main>
 
       {/* Chatbot overlay */}
-      <Chatbot key={chatKey} results={processing.results} isOpen={chatOpen} onClose={() => setChatOpen(false)} />
+      <Chatbot key={chatKey} results={activeInsight} isOpen={chatOpen} onClose={() => setChatOpen(false)} />
 
       {/* Hidden audio for intervention playback */}
       <audio ref={audioRef} className="hidden" />

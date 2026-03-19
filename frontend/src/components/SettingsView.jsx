@@ -25,7 +25,9 @@ export default function SettingsView({ settings, onSave }) {
       try {
         const { default: axios } = await import('axios');
         await axios.post('http://127.0.0.1:5000/mappings', { emotion, music_path: filePath });
-      } catch {}
+      } catch (error) {
+        console.warn('Failed to sync music mapping to backend:', error);
+      }
     } catch {
       setSaveStatus(s => ({ ...s, [emotion]: 'error' }));
     }
@@ -92,7 +94,7 @@ export default function SettingsView({ settings, onSave }) {
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-semibold text-text-primary">When emotional shift is detected</p>
-            <p className="text-xs text-text-muted">Controls how the notification plays music</p>
+            <p className="text-xs text-text-muted">Controls how the stress-support popup and music behave</p>
           </div>
           <select
             value={settings.notifyPermission}

@@ -92,13 +92,12 @@ export default function RecordingPanel({
     requestPermission,
     startRecording,
     stopRecording,
-    stopStream,
   } = recorder;
 
   useEffect(() => {
     // Automatically request camera permission on mount since this is a system app
     requestPermission();
-  }, []);
+  }, [requestPermission]);
 
   const handleRecord = async () => {
     if (isRecording) { stopRecording(); }
@@ -191,8 +190,8 @@ export default function RecordingPanel({
               )}
 
               <p className="text-[10px] text-text-muted text-center leading-relaxed max-w-xs">
-                Camera data and audio streams are processed locally for privacy. 
-                Lighting and resolution may influence final analytical confidence.
+                Camera data and audio streams are used to understand stress-related emotional patterns.
+                Lighting, background noise, and resolution may influence confidence.
               </p>
             </div>
           </div>
@@ -211,7 +210,7 @@ export default function RecordingPanel({
             overflow-hidden
           `}
         >
-          <span className="relative z-10">Run Cognitive Analysis</span>
+          <span className="relative z-10">Run Stress Analysis</span>
           {canAnalyze && !isProcessing && (
             <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
           )}
