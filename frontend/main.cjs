@@ -3,6 +3,13 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 
+// Linux machines without proper VAAPI support can spam GPU init errors.
+if (process.platform === 'linux') {
+  app.disableHardwareAcceleration();
+  app.commandLine.appendSwitch('disable-features', 'VaapiVideoDecoder,VaapiVideoEncoder,UseChromeOSDirectVideoDecoder');
+  app.commandLine.appendSwitch('use-gl', 'swiftshader');
+}
+
 // ─── State ────────────────────────────────────────────────────
 let mainWindow = null;
 let tray = null;
@@ -49,6 +56,36 @@ function saveSettings(data) {
 // ─── Flask Backend (on-demand) ────────────────────────────────
 const FLASK_URL = 'http://127.0.0.1:5000';
 const BACKEND_CWD = path.join(__dirname, '..');
+const ROOT_CWD = BACKEND_CWD;
+
+function resolvePythonCommand() {
+  if (process.env.PYTHON_BIN) return process.env.PYTHON_BIN;
+
+  if (process.platform === 'win32') {
+    return 'python';
+  }
+
+  const candidates = [
+    path.join(ROOT_CWD, 'linuxvnev', 'bin', 'python'),
+    path.join(ROOT_CWD, 'linuxvenv', 'bin', 'python'),
+    path.join(ROOT_CWD, 'linuxvnven', 'bin', 'python'),
+    path.join(ROOT_CWD, '.venv', 'bin', 'python'),
+    path.join(ROOT_CWD, 'myenv', 'bin', 'python'),
+    path.join(ROOT_CWD, 'venv', 'bin', 'python'),
+    'python3',
+    'python',
+  ];
+
+  for (const candidate of candidates) {
+    if (candidate.includes(path.sep)) {
+      if (fs.existsSync(candidate)) return candidate;
+    } else {
+      return candidate;
+    }
+  }
+
+  return 'python3';
+}
 
 function startBackend() {
   if (pythonProcess && !pythonProcess.killed) {
@@ -61,8 +98,8 @@ function startBackend() {
     pythonReady = false;
     pythonReadyCallbacks = [];
 
-    // Linux environments often provide `python3` instead of `python`.
-    const pythonCmd = process.platform === 'win32' ? 'python' : (process.env.PYTHON_BIN || 'python3');
+    const pythonCmd = resolvePythonCommand();
+    console.log(`[Backend] Python command: ${pythonCmd}`);
     pythonProcess = spawn(pythonCmd, ['app.py'], { cwd: BACKEND_CWD });
 
     const readyTimer = setTimeout(() => {
@@ -90,6 +127,9 @@ function startBackend() {
     pythonProcess.stderr.on('data', (data) => {
       const text = data.toString();
       console.error(`[Flask Error]: ${text}`);
+      if (text.includes("ModuleNotFoundError: No module named 'flask'")) {
+        console.error('[Backend] Flask dependency missing. Run backend setup and install requirements in your Python environment.');
+      }
       // Flask dev server prints its "Running on" to stderr
       if ((text.includes('Running on') || text.includes('Serving Flask')) && !pythonReady) {
         clearTimeout(readyTimer);

@@ -95,7 +95,7 @@ export default function RecordingPanel({
   } = recorder;
 
   useEffect(() => {
-    // Automatically request camera permission on mount since this is a system app
+    // Try on mount so the live preview appears quickly when permission is available.
     requestPermission();
   }, [requestPermission]);
 
@@ -134,7 +134,14 @@ export default function RecordingPanel({
                   <div className="w-12 h-12 mx-auto rounded-full bg-surface-raised flex items-center justify-center">
                     <Camera className="w-6 h-6 text-text-muted" />
                   </div>
-                  <p className="text-text-secondary text-sm">Awaiting camera access...</p>
+                  <p className="text-text-secondary text-sm">Camera and microphone access is required for analysis.</p>
+                  <button
+                    onClick={requestPermission}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-white text-xs font-bold cursor-pointer hover:opacity-90 transition-all"
+                  >
+                    <Mic className="w-3.5 h-3.5" />
+                    Enable Camera and Mic
+                  </button>
                 </div>
               )}
 

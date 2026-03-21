@@ -29,7 +29,6 @@ export default function App() {
   const [currentTab, setCurrentTab] = useState('dashboard');
   const [phase, setPhase] = useState('idle');           // idle | processing | results
   const [chatOpen, setChatOpen] = useState(false);
-  const [chatKey, setChatKey] = useState(0);
   const [lastDaemonResult, setLastDaemonResult] = useState(null);
   const audioRef = useRef(null);
   const activeInsight = processing.results || lastDaemonResult;
@@ -69,7 +68,6 @@ export default function App() {
   const handleReset = () => {
     processing.reset();
     setPhase('idle');
-    setChatKey(k => k + 1);
   };
 
   // ── Format countdown ──────────────────────────────────────
@@ -274,7 +272,7 @@ export default function App() {
       </main>
 
       {/* Chatbot overlay */}
-      <Chatbot key={chatKey} results={activeInsight} isOpen={chatOpen} onClose={() => setChatOpen(false)} />
+      <Chatbot results={activeInsight} isOpen={chatOpen} onClose={() => setChatOpen(false)} />
 
       {/* Hidden audio for intervention playback */}
       <audio ref={audioRef} className="hidden" />
