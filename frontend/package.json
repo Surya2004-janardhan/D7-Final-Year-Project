@@ -10,24 +10,25 @@
     "files": [
       "dist/**/*",
       "main.cjs",
+      "scripts/**/*",
       "public/**/*",
       "package.json"
     ],
-    "linux": {
+    "win": {
       "target": [
-        "AppImage",
-        "deb"
-      ],
-      "category": "Utility"
+        "nsis",
+        "portable"
+      ]
     }
   },
   "scripts": {
-    "dev": "vite",
-    "electron:start": "concurrently \"npm run dev\" \"wait-on tcp:5173 && electron .\"",
+    "dev": "vite --host 127.0.0.1 --port 5173 --strictPort",
+    "electron:start": "concurrently \"npm run dev\" \"wait-on tcp:5173 && npm run electron:run\"",
     "electron:dev": "npm run electron:start",
-    "electron:dist": "electron .",
+    "electron:run": "node ./scripts/run-electron.cjs",
+    "electron:dist": "npm run electron:run",
     "build": "vite build",
-    "electron:build": "npm run build && electron-builder --linux AppImage deb",
+    "electron:build": "npm run build && electron-builder --win nsis portable",
     "lint": "eslint .",
     "preview": "vite preview"
   },

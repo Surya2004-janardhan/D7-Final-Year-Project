@@ -1,7 +1,11 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain, Notification, nativeImage, shell } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, Notification, nativeImage, shell, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const net = require('net');
 const { spawn } = require('child_process');
+
+// Allow app-managed support audio playback without requiring explicit user gesture each time.
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
 // ─── State ────────────────────────────────────────────────────
 let mainWindow = null;
@@ -49,10 +53,58 @@ function saveSettings(data) {
 // ─── Flask Backend (on-demand) ────────────────────────────────
 const FLASK_URL = 'http://127.0.0.1:5000';
 const BACKEND_CWD = path.join(__dirname, '..');
+const ROOT_CWD = BACKEND_CWD;
 
-function startBackend() {
+function isBackendListening(port = 5000, host = '127.0.0.1', timeoutMs = 600) {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    let settled = false;
+
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      resolve(value);
+    };
+
+    socket.setTimeout(timeoutMs);
+    socket.once('connect', () => finish(true));
+    socket.once('timeout', () => finish(false));
+    socket.once('error', () => finish(false));
+    socket.connect(port, host);
+  });
+}
+
+function resolvePythonCommand() {
+  if (process.env.PYTHON_BIN) return process.env.PYTHON_BIN;
+
+  const candidates = [
+    path.join(ROOT_CWD, '.venv', 'Scripts', 'python.exe'),
+    path.join(ROOT_CWD, 'venv', 'Scripts', 'python.exe'),
+    path.join(ROOT_CWD, 'myenv', 'Scripts', 'python.exe'),
+    'python',
+  ];
+
+  for (const candidate of candidates) {
+    if (candidate.includes(path.sep)) {
+      if (fs.existsSync(candidate)) return candidate;
+    } else {
+      return candidate;
+    }
+  }
+
+  return 'python';
+}
+
+async function startBackend() {
   if (pythonProcess && !pythonProcess.killed) {
     console.log('[Backend] Already running');
+    return Promise.resolve();
+  }
+
+  if (await isBackendListening()) {
+    console.log('[Backend] Existing backend detected on 127.0.0.1:5000. Reusing it.');
+    pythonReady = true;
     return Promise.resolve();
   }
 
@@ -61,8 +113,8 @@ function startBackend() {
     pythonReady = false;
     pythonReadyCallbacks = [];
 
-    // Linux environments often provide `python3` instead of `python`.
-    const pythonCmd = process.platform === 'win32' ? 'python' : (process.env.PYTHON_BIN || 'python3');
+    const pythonCmd = resolvePythonCommand();
+    console.log(`[Backend] Python command: ${pythonCmd}`);
     pythonProcess = spawn(pythonCmd, ['app.py'], { cwd: BACKEND_CWD });
 
     const readyTimer = setTimeout(() => {
@@ -90,6 +142,21 @@ function startBackend() {
     pythonProcess.stderr.on('data', (data) => {
       const text = data.toString();
       console.error(`[Flask Error]: ${text}`);
+      if (text.includes('Address already in use') || text.includes('Port 5000 is in use')) {
+        console.log('[Backend] Port 5000 already in use. Reusing existing backend instance.');
+        clearTimeout(readyTimer);
+        pythonReady = true;
+        pythonReadyCallbacks.forEach(cb => cb());
+        pythonReadyCallbacks = [];
+        resolve();
+        if (pythonProcess && !pythonProcess.killed) {
+          pythonProcess.kill('SIGTERM');
+        }
+        return;
+      }
+      if (text.includes("ModuleNotFoundError: No module named 'flask'")) {
+        console.error('[Backend] Flask dependency missing. Run backend setup and install requirements in your Python environment.');
+      }
       // Flask dev server prints its "Running on" to stderr
       if ((text.includes('Running on') || text.includes('Serving Flask')) && !pythonReady) {
         clearTimeout(readyTimer);
@@ -180,7 +247,10 @@ function setupIPC() {
     return { ok: true };
   });
 
-  ipcMain.handle('backend-status', () => ({ running: !!pythonProcess && pythonReady }));
+  ipcMain.handle('backend-status', async () => {
+    const running = (!!pythonProcess && pythonReady) || (await isBackendListening());
+    return { running };
+  });
 
   // Native OS Notification
   ipcMain.handle('notify-shift', (_e, { emotion, autoPlay, musicPath }) => {
@@ -221,6 +291,25 @@ function setupIPC() {
   });
 }
 
+function setupMediaPermissions() {
+  const ses = session.defaultSession;
+  if (!ses) return;
+
+  ses.setPermissionCheckHandler((_webContents, permission, requestingOrigin) => {
+    if (permission !== 'media') return true;
+    return requestingOrigin.startsWith('http://127.0.0.1:5173') || requestingOrigin.startsWith('file://');
+  });
+
+  ses.setPermissionRequestHandler((_webContents, permission, callback, details) => {
+    if (permission === 'media') {
+      const allowedOrigin = details.requestingUrl.startsWith('http://127.0.0.1:5173') || details.requestingUrl.startsWith('file://');
+      callback(allowedOrigin);
+      return;
+    }
+    callback(true);
+  });
+}
+
 // ─── Create Window ────────────────────────────────────────────
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -239,12 +328,21 @@ function createWindow() {
   });
 
   const indexPath = path.join(__dirname, 'dist', 'index.html');
-  if (fs.existsSync(indexPath) && !process.argv.includes('--dev')) {
+  const devUrl = 'http://127.0.0.1:5173';
+
+  if (!app.isPackaged) {
+    mainWindow.loadURL(devUrl).then(() => {
+      console.log(`[Window] Loaded dev server: ${devUrl}`);
+    }).catch((e) => {
+      console.error('[Window] Dev server unavailable, falling back to dist build:', e.message);
+      if (fs.existsSync(indexPath)) {
+        mainWindow.loadFile(indexPath).catch(err => console.error('[Window] Dist fallback failed:', err));
+      }
+    });
+  } else if (fs.existsSync(indexPath)) {
     mainWindow.loadFile(indexPath).catch(e => console.error('[Window]', e));
   } else {
-    mainWindow.loadURL('http://localhost:5173').catch(e => {
-      console.error('[Window] Ensure vite dev is running:', e);
-    });
+    console.error('[Window] Packaged app missing dist/index.html');
   }
 
   // Minimize to tray instead of closing
@@ -305,6 +403,7 @@ app.whenReady().then(async () => {
 
   initPaths(); // Must be first — sets up file paths
 
+  setupMediaPermissions();
   setupIPC();
   createWindow();
   createTray();
