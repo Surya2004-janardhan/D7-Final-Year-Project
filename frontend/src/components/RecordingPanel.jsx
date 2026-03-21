@@ -84,7 +84,6 @@ export default function RecordingPanel({
 
   const {
     isRecording,
-    countdown,
     hasPermission,
     videoRef,
     requestPermission,
@@ -162,15 +161,6 @@ export default function RecordingPanel({
                 </div>
               </>
             )}
-
-            {isRecording && (
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="w-20 h-20 rounded-full flex items-center justify-center bg-black/40 backdrop-blur-lg border border-primary/30">
-                  <span className="text-3xl font-bold text-primary tabular-nums drop-shadow-lg">{countdown}</span>
-                </div>
-              </div>
-            )}
-
             <AudioVisualizer stream={recorder.stream} />
           </div>
 
@@ -183,7 +173,6 @@ export default function RecordingPanel({
               >
                 <Camera className="w-4 h-4" />
                 Start Capture
-                <span className="opacity-70 font-medium">(11s)</span>
               </button>
             ) : (
               <button
@@ -198,7 +187,7 @@ export default function RecordingPanel({
             {recordingBlob && !isRecording && (
               <p className="text-sm font-medium text-primary flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-primary inline-block" />
-                Temporal segment captured
+                Recording captured and ready for analysis
               </p>
             )}
 

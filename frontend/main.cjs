@@ -17,6 +17,16 @@ let pythonReadyCallbacks = [];
 // ─── Paths (initialized after app ready) ─────────────────────
 let USER_DATA, SETTINGS_FILE, RESULTS_FILE, ANALYSES_DIR;
 
+function mainLog(scope, message, payload) {
+  const suffix = payload === undefined ? '' : ` ${JSON.stringify(payload)}`;
+  console.log(`${new Date().toISOString()} [${scope}] ${message}${suffix}`);
+}
+
+function mainError(scope, message, payload) {
+  const suffix = payload === undefined ? '' : ` ${JSON.stringify(payload)}`;
+  console.error(`${new Date().toISOString()} [${scope}] ${message}${suffix}`);
+}
+
 function initPaths() {
   USER_DATA      = app.getPath('userData');
   SETTINGS_FILE  = path.join(USER_DATA, 'settings.json');
@@ -37,17 +47,19 @@ const DEFAULT_SETTINGS = {
 function loadSettings() {
   try {
     if (fs.existsSync(SETTINGS_FILE)) {
+      mainLog('settings', 'load ok', { file: SETTINGS_FILE });
       return { ...DEFAULT_SETTINGS, ...JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf-8')) };
     }
-  } catch(e) { console.error('Settings load error:', e); }
+  } catch(e) { mainError('settings', 'load failed', { error: e.message }); }
   return { ...DEFAULT_SETTINGS };
 }
 
 function saveSettings(data) {
   try {
     fs.writeFileSync(SETTINGS_FILE, JSON.stringify(data, null, 2), 'utf-8');
+    mainLog('settings', 'save ok', { file: SETTINGS_FILE });
     return true;
-  } catch(e) { console.error('Settings save error:', e); return false; }
+  } catch(e) { mainError('settings', 'save failed', { error: e.message }); return false; }
 }
 
 // ─── Flask Backend (on-demand) ────────────────────────────────
@@ -98,23 +110,23 @@ function resolvePythonCommand() {
 
 async function startBackend() {
   if (pythonProcess && !pythonProcess.killed) {
-    console.log('[Backend] Already running');
+    mainLog('backend', 'already running');
     return Promise.resolve();
   }
 
   if (await isBackendListening()) {
-    console.log('[Backend] Existing backend detected on 127.0.0.1:5000. Reusing it.');
+    mainLog('backend', 'existing backend detected and reused', { host: '127.0.0.1', port: 5000 });
     pythonReady = true;
     return Promise.resolve();
   }
 
   return new Promise((resolve, reject) => {
-    console.log('[Backend] Spawning Flask...');
+    mainLog('backend', 'spawning flask process');
     pythonReady = false;
     pythonReadyCallbacks = [];
 
     const pythonCmd = resolvePythonCommand();
-    console.log(`[Backend] Python command: ${pythonCmd}`);
+    mainLog('backend', 'python command resolved', { pythonCmd });
     pythonProcess = spawn(pythonCmd, ['app.py'], { cwd: BACKEND_CWD });
 
     const readyTimer = setTimeout(() => {
@@ -123,6 +135,7 @@ async function startBackend() {
         pythonReady = true;
         pythonReadyCallbacks.forEach(cb => cb());
         pythonReadyCallbacks = [];
+        mainLog('backend', 'flask reported ready via timeout fallback');
         resolve();
       }
     }, 8000);
@@ -135,6 +148,7 @@ async function startBackend() {
         pythonReady = true;
         pythonReadyCallbacks.forEach(cb => cb());
         pythonReadyCallbacks = [];
+        mainLog('backend', 'flask reported ready via stdout');
         resolve();
       }
     });
@@ -143,7 +157,7 @@ async function startBackend() {
       const text = data.toString();
       console.error(`[Flask Error]: ${text}`);
       if (text.includes('Address already in use') || text.includes('Port 5000 is in use')) {
-        console.log('[Backend] Port 5000 already in use. Reusing existing backend instance.');
+        mainLog('backend', 'port already in use, reusing existing backend');
         clearTimeout(readyTimer);
         pythonReady = true;
         pythonReadyCallbacks.forEach(cb => cb());
@@ -155,7 +169,7 @@ async function startBackend() {
         return;
       }
       if (text.includes("ModuleNotFoundError: No module named 'flask'")) {
-        console.error('[Backend] Flask dependency missing. Run backend setup and install requirements in your Python environment.');
+        mainError('backend', 'flask dependency missing');
       }
       // Flask dev server prints its "Running on" to stderr
       if ((text.includes('Running on') || text.includes('Serving Flask')) && !pythonReady) {
@@ -163,18 +177,19 @@ async function startBackend() {
         pythonReady = true;
         pythonReadyCallbacks.forEach(cb => cb());
         pythonReadyCallbacks = [];
+        mainLog('backend', 'flask reported ready via stderr');
         resolve();
       }
     });
 
     pythonProcess.on('exit', (code) => {
-      console.log(`[Backend] Process exited with code ${code}`);
+      mainLog('backend', 'process exited', { code });
       pythonProcess = null;
       pythonReady = false;
     });
 
     pythonProcess.on('error', (err) => {
-      console.error('[Backend] Failed to start:', err);
+      mainError('backend', 'failed to start', { error: err.message });
       reject(err);
     });
   });
@@ -182,7 +197,7 @@ async function startBackend() {
 
 function stopBackend() {
   if (pythonProcess && !pythonProcess.killed) {
-    console.log('[Backend] Stopping Flask...');
+    mainLog('backend', 'stopping flask');
     pythonProcess.kill('SIGTERM');
     pythonProcess = null;
     pythonReady = false;
@@ -191,6 +206,14 @@ function stopBackend() {
 
 // ─── IPC Handlers ─────────────────────────────────────────────
 function setupIPC() {
+  ipcMain.on('renderer-log', (_event, entry) => {
+    const suffix = entry?.payload === undefined ? '' : ` ${JSON.stringify(entry.payload)}`;
+    const line = `${entry?.ts || new Date().toISOString()} [renderer:${entry?.scope || 'unknown'}] ${entry?.message || ''}${suffix}`;
+    if (entry?.level === 'error') console.error(line);
+    else if (entry?.level === 'warn') console.warn(line);
+    else console.log(line);
+  });
+
   // Settings persistence
   ipcMain.handle('load-settings', () => loadSettings());
 
@@ -202,8 +225,11 @@ function setupIPC() {
   // History (results log)
   ipcMain.handle('load-results', () => {
     try {
-      if (fs.existsSync(RESULTS_FILE)) return JSON.parse(fs.readFileSync(RESULTS_FILE, 'utf-8'));
-    } catch(e) {}
+      if (fs.existsSync(RESULTS_FILE)) {
+        mainLog('results', 'load ok', { file: RESULTS_FILE });
+        return JSON.parse(fs.readFileSync(RESULTS_FILE, 'utf-8'));
+      }
+    } catch(e) { mainError('results', 'load failed', { error: e.message }); }
     return [];
   });
 
@@ -215,16 +241,20 @@ function setupIPC() {
       // Keep max 500 entries
       if (arr.length > 500) arr = arr.slice(0, 500);
       fs.writeFileSync(RESULTS_FILE, JSON.stringify(arr, null, 2), 'utf-8');
+      mainLog('results', 'save ok', { file: RESULTS_FILE, emotion: result?.fused_emotion });
       return { ok: true };
-    } catch(e) { return { ok: false, error: e.message }; }
+    } catch(e) { mainError('results', 'save failed', { error: e.message }); return { ok: false, error: e.message }; }
   });
 
   // Per-day cached LLM analyses
   ipcMain.handle('load-analysis', (_e, dateKey) => {
     const file = path.join(ANALYSES_DIR, `${dateKey}.json`);
     try {
-      if (fs.existsSync(file)) return JSON.parse(fs.readFileSync(file, 'utf-8'));
-    } catch(e) {}
+      if (fs.existsSync(file)) {
+        mainLog('analysis', 'load cached analysis ok', { file });
+        return JSON.parse(fs.readFileSync(file, 'utf-8'));
+      }
+    } catch(e) { mainError('analysis', 'load cached analysis failed', { error: e.message, file }); }
     return null;
   });
 
@@ -232,8 +262,9 @@ function setupIPC() {
     const file = path.join(ANALYSES_DIR, `${dateKey}.json`);
     try {
       fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf-8');
+      mainLog('analysis', 'save cached analysis ok', { file });
       return { ok: true };
-    } catch(e) { return { ok: false }; }
+    } catch(e) { mainError('analysis', 'save cached analysis failed', { error: e.message, file }); return { ok: false }; }
   });
 
   // On-demand backend control
@@ -249,12 +280,14 @@ function setupIPC() {
 
   ipcMain.handle('backend-status', async () => {
     const running = (!!pythonProcess && pythonReady) || (await isBackendListening());
+    mainLog('backend', 'status requested', { running });
     return { running };
   });
 
   // Native OS Notification
   ipcMain.handle('notify-shift', (_e, { emotion, autoPlay, musicPath }) => {
-    if (!Notification.isSupported()) return;
+    mainLog('notify', 'notify-shift received', { emotion, autoPlay, musicPath });
+    if (!Notification.isSupported()) return { ok: false, error: 'Notification not supported' };
 
     const notif = new Notification({
       title: 'EmotionAI – Emotional Shift',
@@ -266,6 +299,7 @@ function setupIPC() {
     });
 
     notif.on('click', () => {
+      mainLog('notify', 'notification clicked', { emotion, musicPath });
       if (musicPath) {
         shell.openPath(musicPath);
       }
@@ -276,11 +310,7 @@ function setupIPC() {
     });
 
     notif.show();
-
-    // If auto-play, open the file immediately too
-    if (autoPlay && musicPath) {
-      shell.openPath(musicPath);
-    }
+    mainLog('notify', 'notification shown', { emotion });
 
     return { ok: true };
   });
@@ -312,6 +342,7 @@ function setupMediaPermissions() {
 
 // ─── Create Window ────────────────────────────────────────────
 function createWindow() {
+  mainLog('window', 'creating main window');
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -332,17 +363,17 @@ function createWindow() {
 
   if (!app.isPackaged) {
     mainWindow.loadURL(devUrl).then(() => {
-      console.log(`[Window] Loaded dev server: ${devUrl}`);
+      mainLog('window', 'loaded dev server', { devUrl });
     }).catch((e) => {
-      console.error('[Window] Dev server unavailable, falling back to dist build:', e.message);
+      mainError('window', 'dev server unavailable, falling back to dist build', { error: e.message });
       if (fs.existsSync(indexPath)) {
-        mainWindow.loadFile(indexPath).catch(err => console.error('[Window] Dist fallback failed:', err));
+        mainWindow.loadFile(indexPath).catch(err => mainError('window', 'dist fallback failed', { error: err.message }));
       }
     });
   } else if (fs.existsSync(indexPath)) {
-    mainWindow.loadFile(indexPath).catch(e => console.error('[Window]', e));
+    mainWindow.loadFile(indexPath).catch(e => mainError('window', 'load file failed', { error: e.message }));
   } else {
-    console.error('[Window] Packaged app missing dist/index.html');
+    mainError('window', 'packaged app missing dist/index.html');
   }
 
   // Minimize to tray instead of closing
@@ -362,6 +393,7 @@ function createWindow() {
 
 // ─── System Tray ─────────────────────────────────────────────
 function createTray() {
+  mainLog('tray', 'creating tray');
   let iconPath = path.join(__dirname, 'public', 'icon.jpg');
   if (!fs.existsSync(iconPath)) iconPath = path.join(__dirname, 'dist', 'icon.jpg');
 

@@ -2,13 +2,16 @@
  * useDaemon — Background Monitoring Service
  *
  * Behavior per plan.md requirements #3, #4, #5, #6:
- * - When Auto Mode is ON, loop is: wait `intervalMinutes` -> record `recordDurationMinutes` -> process -> repeat.
+ * - When Auto Mode is ON, loop is: wait `intervalMinutes` -> record `recordDurationMinutes`.
+ * - As soon as recording ends, the next wait interval begins immediately.
+ * - The recorded clip is processed in the background without blocking the next timer cycle.
  * - After recording: send to Flask /process in background, persist result via IPC.
  * - After processing: detect emotional shift vs. recent history.
  * - If shift detected: fire native OS notification via IPC.
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import { logError, logInfo } from '../utils/logger';
 
 const ipc = typeof window !== 'undefined' && window.require
   ? window.require('electron').ipcRenderer
@@ -33,6 +36,7 @@ export default function useDaemon({ settings, onNewResult, onShiftDetected }) {
   const timeoutRef = useRef(null);
   const countdownRef = useRef(null);
   const recordingRef = useRef(null);
+  const processingTasksRef = useRef(new Set());
   const recentEmotions = useRef([]);
   const activeRef = useRef(false);
   const loopRef = useRef(null);
@@ -43,10 +47,12 @@ export default function useDaemon({ settings, onNewResult, onShiftDetected }) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia(MEDIA_CONSTRAINTS);
       setLiveStream(stream);
+      logInfo('daemon', 'stream acquired with audio');
       return stream;
     } catch {
       const stream = await navigator.mediaDevices.getUserMedia({ ...MEDIA_CONSTRAINTS, audio: false });
       setLiveStream(stream);
+      logInfo('daemon', 'stream acquired without audio fallback');
       return stream;
     }
   };
@@ -82,11 +88,13 @@ export default function useDaemon({ settings, onNewResult, onShiftDetected }) {
   }, []);
 
   const analyzeBlob = useCallback(async (blob) => {
+    logInfo('daemon', 'background analysis request start', { size: blob?.size });
     const formData = new FormData();
     formData.append('video', blob, 'daemon_capture.webm');
     const res = await axios.post('/process', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
+    logInfo('daemon', 'background analysis request end', { jobId: res.data?.job_id, emotion: res.data?.fused_emotion, error: res.data?.error });
     return res.data;
   }, []);
 
@@ -105,7 +113,7 @@ export default function useDaemon({ settings, onNewResult, onShiftDetected }) {
     const autoPlay = currentSettings.notifyPermission === 'auto';
     const musicPath = currentSettings.musicMappings?.[emotion];
 
-    console.log(`[Daemon] Triggering notification -> ${emotion}. AutoPlay: ${autoPlay}. Music: ${musicPath}`);
+    logInfo('daemon', 'trigger notification', { emotion, autoPlay, musicPath });
 
     if (onShiftDetected) {
       onShiftDetected({ emotion, musicPath, autoPlay });
@@ -113,10 +121,10 @@ export default function useDaemon({ settings, onNewResult, onShiftDetected }) {
 
     if (ipc) {
       try {
-        await ipc.invoke('notify-shift', { emotion, autoPlay: false, musicPath });
-        console.log('[Daemon] Notification IPC sent successfully');
+        await ipc.invoke('notify-shift', { emotion, autoPlay, musicPath });
+        logInfo('daemon', 'notification ipc sent');
       } catch (e) {
-        console.error('[Daemon] Notification IPC failed:', e);
+        logError('daemon', 'notification ipc failed', { error: e.message });
       }
     } else if ('Notification' in window) {
       try {
@@ -131,30 +139,18 @@ export default function useDaemon({ settings, onNewResult, onShiftDetected }) {
     }
   }, [onShiftDetected]);
 
-  const runSession = useCallback(async () => {
-    const durationMin = settingsRef.current.recordDurationMinutes || 5;
-    const durationMs = durationMin * 60 * 1000;
-    console.log(`[Daemon] Session start - recording ${durationMin} min`);
-    let stream = null;
-    let startedAt = null;
-    let endedAt = null;
+  const processRecordingInBackground = useCallback(async ({ blob, startedAt, endedAt }) => {
+    const task = (async () => {
+      try {
+        const result = await analyzeBlob(blob);
 
-    try {
-      startedAt = new Date().toISOString();
-      stream = await requestStream();
-      setDaemonStatus('recording');
+        if (!result || result.error) {
+          logError('daemon', 'background processing failed', { error: result?.error || 'Unknown error' });
+          return;
+        }
 
-      const blob = await recordForDuration(stream, durationMs);
-      endedAt = new Date().toISOString();
-      releaseStream(stream);
-      stream = null;
-      setDaemonStatus('processing');
-
-      const result = await analyzeBlob(blob);
-
-      if (result && !result.error) {
         const emotion = result.fused_emotion;
-        console.log(`[Daemon] Analysis done. Emotion: ${emotion}`);
+        logInfo('daemon', 'background analysis done', { emotion, jobId: result.job_id });
         const enrichedResult = {
           ...result,
           recording_started_at: startedAt,
@@ -173,14 +169,54 @@ export default function useDaemon({ settings, onNewResult, onShiftDetected }) {
         if (shouldNotify) {
           await triggerNotification(emotion);
         }
+      } catch (err) {
+        logError('daemon', 'background processing error', { error: err.message });
       }
+    })();
+
+    processingTasksRef.current.add(task);
+    try {
+      await task;
+    } finally {
+      processingTasksRef.current.delete(task);
+    }
+  }, [analyzeBlob, detectShift, onNewResult, triggerNotification]);
+
+  const runSession = useCallback(async () => {
+    const durationMin = settingsRef.current.recordDurationMinutes || 5;
+    const durationMs = durationMin * 60 * 1000;
+    logInfo('daemon', 'session start', { durationMin });
+    let stream = null;
+    let startedAt = null;
+    let endedAt = null;
+
+    try {
+      startedAt = new Date().toISOString();
+      stream = await requestStream();
+      setDaemonStatus('recording');
+      logInfo('daemon', 'recording started', { startedAt });
+
+      const blob = await recordForDuration(stream, durationMs);
+      endedAt = new Date().toISOString();
+      logInfo('daemon', 'recording ended', { startedAt, endedAt, size: blob?.size });
+      releaseStream(stream);
+      stream = null;
+      setDaemonStatus('waiting');
+
+      void processRecordingInBackground({
+        blob,
+        startedAt,
+        endedAt,
+      });
     } catch (err) {
-      console.error('[Daemon] Session error:', err);
+      logError('daemon', 'session error', { error: err.message });
     } finally {
       releaseStream(stream);
-      setDaemonStatus('waiting');
+      if (activeRef.current) {
+        setDaemonStatus('waiting');
+      }
     }
-  }, [recordForDuration, analyzeBlob, detectShift, triggerNotification, onNewResult]);
+  }, [recordForDuration, processRecordingInBackground]);
 
   const beginCountdown = useCallback((intervalMs) => {
     clearInterval(countdownRef.current);
@@ -219,9 +255,11 @@ export default function useDaemon({ settings, onNewResult, onShiftDetected }) {
     loopRef.current?.();
 
     console.log(`[Daemon] Started. Interval: ${settingsRef.current.intervalMinutes} min, Duration: ${settingsRef.current.recordDurationMinutes} min`);
+    logInfo('daemon', 'daemon started', { intervalMinutes: settingsRef.current.intervalMinutes, recordDurationMinutes: settingsRef.current.recordDurationMinutes });
   }, [isDaemonActive]);
 
   const stopDaemon = useCallback(() => {
+    logInfo('daemon', 'daemon stop requested');
     activeRef.current = false;
     clearTimeout(timeoutRef.current);
     clearInterval(countdownRef.current);
@@ -241,6 +279,7 @@ export default function useDaemon({ settings, onNewResult, onShiftDetected }) {
       activeRef.current = false;
       clearTimeout(timeoutRef.current);
       clearInterval(countdownRef.current);
+      processingTasksRef.current.clear();
     };
   }, []);
 

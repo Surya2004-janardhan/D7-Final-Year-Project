@@ -14,6 +14,7 @@ import Chatbot from './components/Chatbot';
 import CalendarView from './components/CalendarView';
 import SettingsView from './components/SettingsView';
 import InterventionPopup from './components/InterventionPopup';
+import { logError, logInfo } from './utils/logger';
 
 import { Brain, LayoutDashboard, CalendarRange, SlidersHorizontal, MessageCircle, Activity, ChevronRight, RotateCcw, AlertTriangle } from 'lucide-react';
 
@@ -46,15 +47,14 @@ export default function App() {
 
     musicPlayingRef.current = true;
     setMusicNowPlaying(nextTrack);
-
-    const src = nextTrack.musicPath.startsWith('file://')
-      ? nextTrack.musicPath
-      : `file://${encodeURI(nextTrack.musicPath)}`;
+    const src = `/stream_local?path=${encodeURIComponent(nextTrack.musicPath)}`;
 
     audio.src = src;
+    logInfo('app', 'attempting in-app song playback', { emotion: nextTrack.emotion, musicPath: nextTrack.musicPath, src });
     audio.play().catch(() => {
       musicPlayingRef.current = false;
       setMusicNowPlaying(null);
+      logError('app', 'in-app song playback failed', { emotion: nextTrack.emotion, musicPath: nextTrack.musicPath });
     });
   }, []);
 
@@ -62,6 +62,7 @@ export default function App() {
     settings,
     onNewResult: (result) => setLastDaemonResult(result),
     onShiftDetected: ({ emotion, musicPath, autoPlay }) => {
+      logInfo('app', 'shift detected', { emotion, musicPath, autoPlay });
       if (!autoPlay || !musicPath) return;
       musicQueueRef.current.push({ emotion, musicPath, at: Date.now() });
       tryPlayNext();
@@ -86,14 +87,15 @@ export default function App() {
     const handleStop = () => {
       musicPlayingRef.current = false;
       setMusicNowPlaying(null);
+      logInfo('app', 'song playback finished or reset');
       setTimeout(() => tryPlayNext(), 150);
     };
     audio.addEventListener('ended', handleStop);
-    audio.addEventListener('pause', handleStop);
+    audio.addEventListener('error', handleStop);
 
     return () => {
       audio.removeEventListener('ended', handleStop);
-      audio.removeEventListener('pause', handleStop);
+      audio.removeEventListener('error', handleStop);
     };
   }, [tryPlayNext]);
 
@@ -104,9 +106,10 @@ export default function App() {
   }, [manualPreviewUrl]);
 
   const handleAnalyze = useCallback(async (input, type) => {
+    logInfo('app', 'manual analyze start', { type });
     setPhase('processing');
     const meta = recorder.lastCaptureMeta || {
-      startedAt: new Date(Date.now() - 11000).toISOString(),
+      startedAt: new Date().toISOString(),
       endedAt: new Date().toISOString(),
     };
     setManualMeta(meta);
@@ -121,7 +124,9 @@ export default function App() {
 
     if (ipc) {
       const status = await ipc.invoke('backend-status');
+      logInfo('app', 'backend status checked', status);
       if (!status.running) {
+        logInfo('app', 'backend start requested for manual analyze');
         await ipc.invoke('start-backend');
         await new Promise(r => setTimeout(r, 4000));
       }
@@ -137,12 +142,15 @@ export default function App() {
         recording_started_at: meta.startedAt,
         recording_ended_at: meta.endedAt,
       });
+      logInfo('app', 'manual analyze result persisted', { emotion: result.fused_emotion });
     }
 
+    logInfo('app', 'manual analyze finished', { type, emotion: result?.fused_emotion, error: result?.error });
     setPhase('results');
   }, [processing, recorder.lastCaptureMeta, manualPreviewUrl]);
 
   const handleReset = () => {
+    logInfo('app', 'dashboard reset');
     processing.reset();
     if (manualPreviewUrl) {
       URL.revokeObjectURL(manualPreviewUrl);

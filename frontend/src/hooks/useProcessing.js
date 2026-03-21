@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import axios from 'axios';
+import { logError, logInfo } from '../utils/logger';
 
 export default function useProcessing() {
   const [isProcessing, setIsProcessing] = useState(false);
@@ -10,6 +11,7 @@ export default function useProcessing() {
   const pollRef = useRef(null);
 
   const startPolling = useCallback((jobId) => {
+    logInfo('processing', 'start polling', { jobId });
     clearInterval(pollRef.current);
     pollRef.current = setInterval(async () => {
       try {
@@ -17,6 +19,7 @@ export default function useProcessing() {
         const data = res.data || {};
         setProgress(data.progress || 0);
         setStatus(data.status || 'Processing...');
+        logInfo('processing', 'progress update', { jobId, progress: data.progress || 0, status: data.status || 'Processing...' });
       } catch {
         // Ignore polling hiccups and keep waiting for the final response.
       }
@@ -24,6 +27,7 @@ export default function useProcessing() {
   }, []);
 
   const processVideo = useCallback(async (blob) => {
+    logInfo('processing', 'manual video analysis start', { size: blob?.size });
     setIsProcessing(true);
     setError('');
     setResults(null);
@@ -43,9 +47,11 @@ export default function useProcessing() {
       clearInterval(pollRef.current);
 
       if (data.error) {
+        logError('processing', 'manual video analysis failed', { error: data.error, jobId: data.job_id });
         setError(data.error);
         return null;
       } else {
+        logInfo('processing', 'manual video analysis complete', { emotion: data.fused_emotion, jobId: data.job_id });
         setResults(data);
         setProgress(100);
         setStatus('Complete');
@@ -53,6 +59,7 @@ export default function useProcessing() {
       }
     } catch (err) {
       clearInterval(pollRef.current);
+      logError('processing', 'manual video analysis request error', { error: err.response?.data?.error || err.message || 'Processing failed' });
       setError(err.response?.data?.error || err.message || 'Processing failed');
       return null;
     } finally {
@@ -61,6 +68,7 @@ export default function useProcessing() {
   }, [startPolling]);
 
   const processFile = useCallback(async (file) => {
+    logInfo('processing', 'file analysis start', { name: file?.name, size: file?.size });
     setIsProcessing(true);
     setError('');
     setResults(null);
@@ -80,9 +88,11 @@ export default function useProcessing() {
       clearInterval(pollRef.current);
 
       if (data.error) {
+        logError('processing', 'file analysis failed', { error: data.error, jobId: data.job_id });
         setError(data.error);
         return null;
       } else {
+        logInfo('processing', 'file analysis complete', { emotion: data.fused_emotion, jobId: data.job_id });
         setResults(data);
         setProgress(100);
         setStatus('Complete');
@@ -90,6 +100,7 @@ export default function useProcessing() {
       }
     } catch (err) {
       clearInterval(pollRef.current);
+      logError('processing', 'file analysis request error', { error: err.response?.data?.error || err.message || 'Processing failed' });
       setError(err.response?.data?.error || err.message || 'Processing failed');
       return null;
     } finally {
@@ -98,6 +109,7 @@ export default function useProcessing() {
   }, [startPolling]);
 
   const reset = useCallback(() => {
+    logInfo('processing', 'reset called');
     clearInterval(pollRef.current);
     setIsProcessing(false);
     setProgress(0);

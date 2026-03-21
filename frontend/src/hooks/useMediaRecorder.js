@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { logError, logInfo, logWarn } from '../utils/logger';
 
 const MEDIA_CONSTRAINTS = {
   video: {
@@ -11,14 +12,12 @@ const MEDIA_CONSTRAINTS = {
 
 export default function useMediaRecorder() {
   const [isRecording, setIsRecording] = useState(false);
-  const [countdown, setCountdown] = useState(11);
   const [stream, setStream] = useState(null);
   const [hasPermission, setHasPermission] = useState(false);
   const [permissionError, setPermissionError] = useState(null);
   const [lastCaptureMeta, setLastCaptureMeta] = useState(null);
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
-  const timerRef = useRef(null);
   const videoRef = useRef(null);
 
   const setVideoElement = useCallback((node) => {
@@ -40,23 +39,25 @@ export default function useMediaRecorder() {
       setStream(s);
       setHasPermission(true);
       setPermissionError(null);
+      logInfo('recorder', 'camera+mic permission granted');
       if (videoRef.current) {
         videoRef.current.srcObject = s;
       }
       return s;
     } catch (err) {
-      console.error('Permission denied for video+audio:', err);
+      logWarn('recorder', 'camera+mic permission denied, trying camera-only fallback', { error: err.message });
       try {
         const s = await navigator.mediaDevices.getUserMedia({ ...MEDIA_CONSTRAINTS, audio: false });
         setStream(s);
         setHasPermission(true);
         setPermissionError('Microphone unavailable. Using camera-only mode.');
+        logWarn('recorder', 'camera-only fallback granted');
         if (videoRef.current) {
           videoRef.current.srcObject = s;
         }
         return s;
       } catch (fallbackErr) {
-        console.error('Permission denied for camera fallback:', fallbackErr);
+        logError('recorder', 'camera fallback denied', { error: fallbackErr?.message || 'Camera/microphone access blocked.' });
         setHasPermission(false);
         setPermissionError(fallbackErr?.message || 'Camera/microphone access blocked.');
         return null;
@@ -66,6 +67,7 @@ export default function useMediaRecorder() {
 
   const stopStream = useCallback(() => {
     if (stream) {
+      logInfo('recorder', 'stopping media stream');
       stream.getTracks().forEach(t => t.stop());
       setStream(null);
       setHasPermission(false);
@@ -77,6 +79,7 @@ export default function useMediaRecorder() {
   }, [stream]);
 
   const startRecording = useCallback(async () => {
+    logInfo('recorder', 'manual recording requested');
     let s = stream;
     if (!s) {
       s = await requestPermission();
@@ -96,44 +99,34 @@ export default function useMediaRecorder() {
     return new Promise((resolve) => {
       const startedAt = new Date().toISOString();
       recorder.onstop = () => {
+        const totalSize = chunksRef.current.reduce((sum, chunk) => sum + chunk.size, 0);
         const blob = new Blob(chunksRef.current, { type: 'video/webm' });
         chunksRef.current = [];
         setIsRecording(false);
-        clearInterval(timerRef.current);
-        setCountdown(11);
         setLastCaptureMeta({
           startedAt,
           endedAt: new Date().toISOString(),
         });
+        logInfo('recorder', 'manual recording completed', { startedAt, size: totalSize });
         resolve(blob);
       };
 
       mediaRecorderRef.current = recorder;
       recorder.start(100);
       setIsRecording(true);
-
-      let secs = 11;
-      setCountdown(secs);
-      timerRef.current = setInterval(() => {
-        secs -= 1;
-        setCountdown(secs);
-        if (secs <= 0) {
-          clearInterval(timerRef.current);
-          recorder.stop();
-        }
-      }, 1000);
+      logInfo('recorder', 'manual recording started', { startedAt });
     });
   }, [stream, requestPermission]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      logInfo('recorder', 'manual recording stop requested');
       mediaRecorderRef.current.stop();
     }
   }, []);
 
   useEffect(() => {
     return () => {
-      clearInterval(timerRef.current);
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
         mediaRecorderRef.current.stop();
       }
@@ -145,7 +138,6 @@ export default function useMediaRecorder() {
 
   return {
     isRecording,
-    countdown,
     stream,
     hasPermission,
     permissionError,

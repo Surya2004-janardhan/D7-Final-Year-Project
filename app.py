@@ -13,10 +13,27 @@ import sqlite3
 from datetime import datetime
 from uuid import uuid4
 import tempfile
+from time import perf_counter
 
 app = Flask(__name__)
 CORS(app)
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB limit for uploads
+
+def log_event(scope, message, **data):
+    suffix = f" | {json.dumps(data, default=str)}" if data else ""
+    print(f"{datetime.now().isoformat()} [{scope}] {message}{suffix}")
+
+@app.before_request
+def log_request_start():
+    request._start_time = perf_counter()
+    log_event('api', 'request start', method=request.method, path=request.path)
+
+@app.after_request
+def log_request_end(response):
+    started = getattr(request, '_start_time', None)
+    duration_ms = round((perf_counter() - started) * 1000, 2) if started else None
+    log_event('api', 'request end', method=request.method, path=request.path, status=response.status_code, duration_ms=duration_ms)
+    return response
 
 # Directories and Config
 MUSIC_DIR = 'music'
@@ -516,6 +533,8 @@ def update_job(job_id, *, progress=None, status=None, results=None):
         state["status"] = status
     if results is not None:
         state["results"] = results
+    if progress is not None or status is not None:
+        log_event('job', 'state updated', job_id=job_id, progress=state.get("progress"), status=state.get("status"))
     return state
 
 @app.route('/status', methods=['GET'])
@@ -530,6 +549,7 @@ def process():
     job_id = request.form.get('job_id') or str(uuid4())
     progress_state = init_job(job_id)
     update_job(job_id, progress=0, status="Initializing", results=None)
+    log_event('process', 'job started', job_id=job_id)
     
     print("=" * 50)
     print("STARTING EMOTION ANALYSIS PROCESS")
@@ -549,6 +569,7 @@ def process():
         
         print(f"Saving raw video to {raw_video_path}")
         video_file.save(raw_video_path)
+        log_event('process', 'raw video saved', job_id=job_id, raw_video_path=raw_video_path)
 
         # 1. Normalize Video using FFmpeg (Fixes WebM headers for OpenCV)
         update_job(job_id, status="Normalizing Video", progress=5)
@@ -563,8 +584,10 @@ def process():
                 .run(cmd=ffmpeg_bin, quiet=True)
             )
             print("Video normalized successfully")
+            log_event('process', 'video normalized', job_id=job_id, video_path=video_path)
         except Exception as e:
             print(f"Video normalization failed: {e}")
+            log_event('process', 'video normalization failed', job_id=job_id, error=str(e))
             for path in [raw_video_path]:
                 if path and os.path.exists(path):
                     os.remove(path)
@@ -579,6 +602,7 @@ def process():
         has_face, face_hits = detect_human_face_in_video(video_path)
         if not has_face:
             print(f"FACE_GATE_REJECTED: No valid human face detected (hits={face_hits}).")
+            log_event('process', 'face gate rejected', job_id=job_id, hits=face_hits)
             for path in [raw_video_path, video_path, audio_path]:
                 if path and os.path.exists(path):
                     os.remove(path)
@@ -600,8 +624,10 @@ def process():
                 .run(cmd=ffmpeg_bin, quiet=True)
             )
             print("Audio extracted successfully")
+            log_event('process', 'audio extracted', job_id=job_id, audio_path=audio_path)
         except Exception as e:
             print(f"Audio extraction failed: {e}")
+            log_event('process', 'audio extraction failed', job_id=job_id, error=str(e))
             audio_path = None
 
         # --- UNIFIED TEMPORAL PROCESSING ---
@@ -817,6 +843,7 @@ def process():
 
         final_result['job_id'] = job_id
         update_job(job_id, progress=100, status="Complete", results=final_result)
+        log_event('process', 'job completed', job_id=job_id, emotion=final_result.get('fused_emotion'), stress_label=final_result.get('stress_label'))
         return jsonify(final_result)
 
     except Exception as e:
@@ -830,6 +857,7 @@ def process():
         except Exception:
             pass
         update_job(job_id, status=f"Error: {str(e)}")
+        log_event('process', 'job failed', job_id=job_id, error=str(e))
         return jsonify({'error': str(e), 'job_id': job_id})
 
 @app.route('/downloaded_music/<path:filename>')
@@ -923,9 +951,11 @@ def get_history():
     """Fetch history for the calendar view."""
     try:
         limit = request.args.get('limit', 50, type=int)
+        log_event('history', 'load requested', limit=limit)
         with get_db() as conn:
             rows = conn.execute('SELECT * FROM history ORDER BY timestamp DESC LIMIT ?', (limit,)).fetchall()
             history = [dict(row) for row in rows]
+            log_event('history', 'load completed', count=len(history))
             return jsonify(history)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -977,6 +1007,7 @@ def analyze_history():
         
         if not history:
              return jsonify({'analysis': 'Not enough data to generate a trend analysis.'})
+        log_event('analysis', 'history analysis requested', rows=len(history))
              
         # Format history for prompt
         history_summary = "\\n".join([
@@ -1012,8 +1043,10 @@ def analyze_history():
         response = requests.post(GROQ_URL, headers=headers, json=payload, timeout=20)
         if response.status_code == 200:
             analysis = response.json()['choices'][0]['message']['content'].strip()
+            log_event('analysis', 'history analysis completed', rows=len(history))
             return jsonify({'analysis': analysis})
         else:
+            log_event('analysis', 'history analysis provider error', status=response.status_code)
             return jsonify({'analysis': 'AI Provider Error: ' + response.text}), 500
             
     except Exception as e:
@@ -1127,12 +1160,15 @@ How to behave:
         response = requests.post(GROQ_URL, headers=headers, json=payload)
         if response.status_code == 200:
             content = response.json()['choices'][0]['message']['content']
+            log_event('chat', 'chat completed', prompt_len=len(user_message), history_count=len(history), analysis_rows=len(analysis_history))
             return jsonify({'reply': content.strip()})
         else:
+            log_event('chat', 'chat provider error', status=response.status_code)
             return jsonify({'reply': 'Sorry, I couldn\'t process that right now. Please try again.'})
 
     except Exception as e:
         print(f"Chat error: {e}")
+        log_event('chat', 'chat failed', error=str(e))
         return jsonify({'reply': 'Something went wrong. Please try again.'})
 
 if __name__ == '__main__':

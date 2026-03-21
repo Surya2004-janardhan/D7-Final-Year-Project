@@ -1,6 +1,19 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { CalendarRange, Sparkles, Brain, TrendingUp, TrendingDown, Clock, Activity, BarChart3 } from 'lucide-react';
 import axios from 'axios';
+import { Line } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Tooltip,
+  Legend,
+} from 'chart.js';
+import { logError, logInfo } from '../utils/logger';
+
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
 
 const ipc = typeof window !== 'undefined' && window.require
   ? window.require('electron').ipcRenderer
@@ -25,32 +38,34 @@ const STRESS_BASELINE = {
 
 const RANGES = [
   { id: 'today', label: 'Today' },
-  { id: 'week',  label: 'This Week' },
+  { id: 'week', label: 'This Week' },
   { id: 'month', label: 'This Month' },
-  { id: 'all',   label: 'All Time' },
+  { id: 'all', label: 'All Time' },
 ];
 
 export default function CalendarView() {
-  const [history, setHistory]         = useState([]);
-  const [loading, setLoading]         = useState(true);
-  const [range, setRange]             = useState('week');
+  const [history, setHistory] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [range, setRange] = useState('week');
   const [analysisText, setAnalysisText] = useState('');
-  const [analyzing, setAnalyzing]     = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
   const [analysisDate, setAnalysisDate] = useState(null);
 
-  // Load results from Electron userData or Flask fallback
   const loadHistory = useCallback(async () => {
     setLoading(true);
+    logInfo('history', 'load start');
     try {
       if (ipc) {
         const data = await ipc.invoke('load-results');
         setHistory(Array.isArray(data) ? data : []);
+        logInfo('history', 'load complete via ipc', { count: Array.isArray(data) ? data.length : 0 });
       } else {
         const { data } = await axios.get('/history?limit=500');
-        setHistory(data);
+        setHistory(Array.isArray(data) ? data : []);
+        logInfo('history', 'load complete via api', { count: Array.isArray(data) ? data.length : 0 });
       }
-    } catch(e) {
-      console.error('Failed to load history:', e);
+    } catch (e) {
+      logError('history', 'load failed', { error: e.message });
     } finally {
       setLoading(false);
     }
@@ -58,35 +73,12 @@ export default function CalendarView() {
 
   useEffect(() => { loadHistory(); }, [loadHistory]);
 
-  // Filter history by selected range
-  const filtered = useMemo(() => {
-    const now = new Date();
-    return history.filter(row => {
-      const t = new Date(row.timestamp);
-      if (range === 'today') return t.toDateString() === now.toDateString();
-      if (range === 'week')  { const w = new Date(now); w.setDate(w.getDate() - 7); return t >= w; }
-      if (range === 'month') { const m = new Date(now); m.setMonth(m.getMonth() - 1); return t >= m; }
-      return true;
-    });
-  }, [history, range]);
-
-  // Group by hour of day
-  const hourlyData = useMemo(() => {
-    const hours = Array.from({ length: 24 }, (_, i) => ({ hour: i, entries: [] }));
-    filtered.forEach(row => {
-      const h = new Date(row.timestamp).getHours();
-      hours[h].entries.push(row.fused_emotion);
-    });
-    return hours;
-  }, [filtered]);
-
-  // Dominant emotion for a bucket
-  const dominant = (entries) => {
+  const dominant = useCallback((entries) => {
     if (!entries.length) return null;
     const freq = {};
-    entries.forEach(e => { freq[e] = (freq[e] || 0) + 1; });
+    entries.forEach((e) => { freq[e] = (freq[e] || 0) + 1; });
     return Object.entries(freq).sort((a, b) => b[1] - a[1])[0][0];
-  };
+  }, []);
 
   const estimateRowStress = useCallback((row) => {
     if (typeof row.stress_score === 'number') return row.stress_score;
@@ -95,17 +87,128 @@ export default function CalendarView() {
     const stability = typeof row.stability === 'number'
       ? row.stability
       : typeof row.emotional_stability === 'number'
-      ? row.emotional_stability
-      : 0.65;
+        ? row.emotional_stability
+        : 0.65;
     return Math.max(0, Math.min(1, baseline + (0.2 * transition) + (0.1 * (1 - stability))));
   }, []);
 
-  // Summary stats
+  const filtered = useMemo(() => {
+    const now = new Date();
+    return history.filter((row) => {
+      const t = new Date(row.timestamp);
+      if (range === 'today') return t.toDateString() === now.toDateString();
+      if (range === 'week') { const w = new Date(now); w.setDate(w.getDate() - 7); return t >= w; }
+      if (range === 'month') { const m = new Date(now); m.setMonth(m.getMonth() - 1); return t >= m; }
+      return true;
+    });
+  }, [history, range]);
+
+  const hourlyData = useMemo(() => {
+    const hours = Array.from({ length: 24 }, (_, i) => ({ hour: i, entries: [] }));
+    filtered.forEach((row) => {
+      const h = new Date(row.timestamp).getHours();
+      hours[h].entries.push(row.fused_emotion);
+    });
+    return hours;
+  }, [filtered]);
+
+  const periodBoxes = useMemo(() => {
+    const now = new Date();
+    const byDay = new Map();
+    filtered.forEach((row) => {
+      const date = new Date(row.timestamp);
+      const key = date.toISOString().slice(0, 10);
+      if (!byDay.has(key)) byDay.set(key, []);
+      byDay.get(key).push(row);
+    });
+
+    const buildDayEntry = (date) => {
+      const key = date.toISOString().slice(0, 10);
+      const rows = byDay.get(key) || [];
+      const dominantEmotion = dominant(rows.map((r) => r.fused_emotion));
+      const avgStress = rows.length > 0
+        ? rows.reduce((sum, row) => sum + estimateRowStress(row), 0) / rows.length
+        : null;
+      return { key, label: date.getDate(), rows, dominantEmotion, avgStress };
+    };
+
+    if (range === 'week') {
+      const days = [];
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date(now);
+        date.setHours(0, 0, 0, 0);
+        date.setDate(now.getDate() - i);
+        days.push(buildDayEntry(date));
+      }
+      return days;
+    }
+
+    if (range === 'month') {
+      const year = now.getFullYear();
+      const month = now.getMonth();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      return Array.from({ length: daysInMonth }, (_, idx) => {
+        const date = new Date(year, month, idx + 1);
+        return buildDayEntry(date);
+      });
+    }
+
+    return [];
+  }, [filtered, range, estimateRowStress, dominant]);
+
+  const allTimeTrend = useMemo(() => {
+    if (history.length === 0) return null;
+    const sorted = [...history].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    const bucket = new Map();
+    sorted.forEach((row) => {
+      const d = new Date(row.timestamp);
+      const key = d.toISOString().slice(0, 10);
+      if (!bucket.has(key)) bucket.set(key, []);
+      bucket.get(key).push(row);
+    });
+    const labels = [];
+    const stressSeries = [];
+    const negSeries = [];
+
+    Array.from(bucket.keys()).sort().forEach((day) => {
+      const rows = bucket.get(day);
+      labels.push(day.slice(5));
+      const avgStress = rows.reduce((sum, row) => sum + estimateRowStress(row), 0) / rows.length;
+      const negRatio = rows.filter((r) => NEGATIVE.includes(r.fused_emotion)).length / rows.length;
+      stressSeries.push(Number(avgStress.toFixed(3)));
+      negSeries.push(Number(negRatio.toFixed(3)));
+    });
+
+    return {
+      labels,
+      datasets: [
+        {
+          label: 'Stress Trend',
+          data: stressSeries,
+          borderColor: '#E11D48',
+          backgroundColor: 'rgba(225,29,72,0.18)',
+          tension: 0.35,
+          fill: true,
+          pointRadius: 2,
+        },
+        {
+          label: 'Negative Emotion Ratio',
+          data: negSeries,
+          borderColor: '#3B82F6',
+          backgroundColor: 'rgba(59,130,246,0.12)',
+          tension: 0.35,
+          fill: false,
+          pointRadius: 2,
+        },
+      ],
+    };
+  }, [history, estimateRowStress]);
+
   const summary = useMemo(() => {
-    const ems = filtered.map(r => r.fused_emotion);
+    const ems = filtered.map((r) => r.fused_emotion);
     if (!ems.length) return null;
-    const pos = ems.filter(e => POSITIVE.includes(e)).length;
-    const neg = ems.filter(e => NEGATIVE.includes(e)).length;
+    const pos = ems.filter((e) => POSITIVE.includes(e)).length;
+    const neg = ems.filter((e) => NEGATIVE.includes(e)).length;
     const posRatio = pos / ems.length;
     return { total: ems.length, pos, neg, posRatio };
   }, [filtered]);
@@ -171,10 +274,8 @@ export default function CalendarView() {
     };
   }, [filtered, estimateRowStress]);
 
-  // Key to cache analysis per range+date
   const cacheKey = `${range}_${new Date().toISOString().slice(0, 10)}`;
 
-  // Load cached analysis for this range/day
   useEffect(() => {
     const loadCached = async () => {
       if (ipc) {
@@ -182,6 +283,7 @@ export default function CalendarView() {
         if (cached) {
           setAnalysisText(cached.text);
           setAnalysisDate(cached.date);
+          logInfo('history', 'loaded cached analysis', { cacheKey });
         } else {
           setAnalysisText('');
           setAnalysisDate(null);
@@ -191,13 +293,13 @@ export default function CalendarView() {
     loadCached();
   }, [cacheKey]);
 
-  // Run LLM analysis
   const handleAnalyze = async () => {
     if (!filtered.length || analyzing) return;
     setAnalyzing(true);
+    logInfo('history', 'run cognitive analysis start', { range, rows: filtered.length });
     try {
       const { data } = await axios.post('http://127.0.0.1:5000/analyze_history', {
-        history: filtered.slice(0, 60)
+        history: filtered.slice(0, 500)
       });
       const result = {
         text: data.analysis,
@@ -207,10 +309,11 @@ export default function CalendarView() {
       setAnalysisText(result.text);
       setAnalysisDate(result.date);
 
-      // Persist so user doesn't need to re-run on same day
       if (ipc) await ipc.invoke('save-analysis', cacheKey, result);
-    } catch {
+      logInfo('history', 'run cognitive analysis complete', { range });
+    } catch (e) {
       setAnalysisText('Analysis failed. Ensure the backend is running and your API key is configured.');
+      logError('history', 'run cognitive analysis failed', { range, error: e.message });
     } finally {
       setAnalyzing(false);
     }
@@ -224,7 +327,6 @@ export default function CalendarView() {
 
   return (
     <div className="space-y-8 animate-fade-up pb-12">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-black text-text-primary">History</h1>
@@ -239,13 +341,14 @@ export default function CalendarView() {
             ? <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
             : <Sparkles className="w-4 h-4" />
           }
-          {analysisDate ? 'Refresh Analysis' : 'Run Analysis'}
+          {range === 'all'
+            ? (analysisDate ? 'Refresh All-Time Cognitive Analysis' : 'Run All-Time Cognitive Analysis')
+            : (analysisDate ? 'Refresh Analysis' : 'Run Analysis')}
         </button>
       </div>
 
-      {/* Range filter */}
       <div className="inline-flex bg-surface-raised rounded-xl p-1 gap-1 border border-border-subtle">
-        {RANGES.map(r => (
+        {RANGES.map((r) => (
           <button
             key={r.id}
             onClick={() => setRange(r.id)}
@@ -258,7 +361,6 @@ export default function CalendarView() {
         ))}
       </div>
 
-      {/* Summary cards */}
       {summary && (
         <div className="grid grid-cols-3 gap-4">
           <div className="panel p-4 text-center">
@@ -330,14 +432,13 @@ export default function CalendarView() {
         </div>
       )}
 
-      {/* Celebration / Encouragement Banner */}
       {summary && (
         <div className={`p-4 rounded-xl border text-sm font-medium ${
           summary.posRatio >= 0.6
             ? 'bg-green-50 border-green-200 text-green-700'
             : summary.posRatio <= 0.3
-            ? 'bg-red-50 border-red-200 text-red-700'
-            : 'bg-blue-50 border-blue-200 text-blue-700'
+              ? 'bg-red-50 border-red-200 text-red-700'
+              : 'bg-blue-50 border-blue-200 text-blue-700'
         }`}>
           {summary.posRatio >= 0.6 && (
             <>Great work. {Math.round(summary.posRatio * 100)}% of your readings show calmer or positive states. Keep this rhythm going.</>
@@ -351,7 +452,81 @@ export default function CalendarView() {
         </div>
       )}
 
-      {/* Hourly Heatmap */}
+      {(range === 'week' || range === 'month') && periodBoxes.length > 0 && (
+        <div className="panel p-6">
+          <h2 className="text-sm font-bold text-text-primary uppercase tracking-wider mb-5 flex items-center gap-2">
+            <CalendarRange className="w-4 h-4 text-primary" />
+            {range === 'week' ? 'Weekly View (7 Days)' : `Monthly View (${periodBoxes.length} Days)`}
+          </h2>
+          <div className={`grid gap-2 ${range === 'week' ? 'grid-cols-7' : 'grid-cols-7 sm:grid-cols-10 md:grid-cols-12'}`}>
+            {periodBoxes.map((box) => {
+              const color = box.dominantEmotion ? EMOTION_COLORS[box.dominantEmotion] : 'var(--color-surface-raised)';
+              return (
+                <div key={box.key} className="rounded-lg border border-border-subtle p-2 bg-surface-base">
+                  <div className="text-[10px] text-text-muted mb-1">{box.label}</div>
+                  <div className="h-8 rounded-md" style={{ backgroundColor: box.rows.length ? `${color}44` : 'var(--color-surface-raised)' }} />
+                  <div className="mt-1 text-[10px] text-text-secondary truncate capitalize">
+                    {box.dominantEmotion || 'No data'}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {range === 'all' && allTimeTrend && (
+        <div className="panel p-6 space-y-6">
+          <div>
+            <h2 className="text-sm font-bold text-text-primary uppercase tracking-wider mb-5 flex items-center gap-2">
+              <Activity className="w-4 h-4 text-primary" />
+              All-Time Temporal Trend
+            </h2>
+            <div className="h-[320px]">
+              <Line
+                data={allTimeTrend}
+                options={{
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  interaction: { mode: 'index', intersect: false },
+                  scales: {
+                    y: {
+                      min: 0,
+                      max: 1,
+                      ticks: { callback: (v) => `${Math.round(v * 100)}%` },
+                    },
+                  },
+                }}
+              />
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-primary/20 bg-primary/5 p-5">
+            <div className="flex items-center justify-between gap-4 mb-3">
+              <div className="flex items-center gap-2">
+                <Brain className="w-5 h-5 text-primary" />
+                <h3 className="text-sm font-bold text-text-primary uppercase tracking-widest">Cognitive Analysis Till Now</h3>
+              </div>
+              <button
+                onClick={handleAnalyze}
+                disabled={analyzing || !filtered.length}
+                className="px-4 py-2 rounded-lg border border-primary/40 text-primary text-xs font-bold hover:bg-primary/5 transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                {analysisDate ? 'Refresh' : 'Run Now'}
+              </button>
+            </div>
+            {analysisText ? (
+              <p className="text-sm text-text-secondary leading-relaxed whitespace-pre-wrap">{analysisText}</p>
+            ) : (
+              <p className="text-sm text-text-muted">Run this to get a cognitive summary of all recorded sessions so far.</p>
+            )}
+            {analysisDate && (
+              <p className="text-[11px] text-text-muted mt-3">Generated {analysisDate}</p>
+            )}
+          </div>
+        </div>
+      )}
+
       {filtered.length > 0 ? (
         <div className="panel p-6">
           <h2 className="text-sm font-bold text-text-primary uppercase tracking-wider mb-5 flex items-center gap-2">
@@ -371,7 +546,6 @@ export default function CalendarView() {
                       borderColor: color ? `${color}66` : undefined,
                     }}
                   />
-                  {/* Tooltip */}
                   <div className="absolute -top-10 left-1/2 -translate-x-1/2 hidden group-hover:flex items-center gap-1.5 px-2 py-1 bg-text-primary text-white text-[10px] rounded-md whitespace-nowrap z-20 shadow-lg">
                     {hour}:00 — {em ? em : 'no data'} {entries.length > 0 && `(${entries.length})`}
                   </div>
@@ -381,7 +555,7 @@ export default function CalendarView() {
             })}
           </div>
           <div className="flex flex-wrap gap-3 mt-4">
-            {EMOTIONS.map(e => (
+            {EMOTIONS.map((e) => (
               <div key={e} className="flex items-center gap-1.5 text-[10px] text-text-secondary">
                 <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: EMOTION_COLORS[e] }} />
                 <span className="capitalize">{e}</span>
@@ -420,8 +594,7 @@ export default function CalendarView() {
         </div>
       )}
 
-      {/* LLM Analysis Result */}
-      {analysisText && (
+      {analysisText && range !== 'all' && (
         <div className="panel p-6 border border-primary/20 bg-primary/5 animate-fade-up">
           <div className="flex items-center gap-2 mb-3">
             <Brain className="w-5 h-5 text-primary" />
@@ -432,7 +605,6 @@ export default function CalendarView() {
         </div>
       )}
 
-      {/* Raw Table */}
       {filtered.length > 0 && (
         <div className="panel overflow-hidden">
           <div className="px-6 py-4 border-b border-border-subtle">
@@ -443,6 +615,8 @@ export default function CalendarView() {
               <thead className="bg-surface-raised border-b border-border-subtle sticky top-0">
                 <tr>
                   <th className="px-5 py-3 font-bold text-text-secondary uppercase tracking-wider">Time</th>
+                  <th className="px-5 py-3 font-bold text-text-secondary uppercase tracking-wider">Record Start</th>
+                  <th className="px-5 py-3 font-bold text-text-secondary uppercase tracking-wider">Record End</th>
                   <th className="px-5 py-3 font-bold text-text-secondary uppercase tracking-wider">Emotion</th>
                   <th className="px-5 py-3 font-bold text-text-secondary uppercase tracking-wider hidden sm:table-cell">Note</th>
                 </tr>
@@ -452,6 +626,12 @@ export default function CalendarView() {
                   <tr key={i} className="hover:bg-surface-raised/60 transition-colors">
                     <td className="px-5 py-3 text-text-muted font-mono whitespace-nowrap">
                       {new Date(row.timestamp).toLocaleString()}
+                    </td>
+                    <td className="px-5 py-3 text-text-muted font-mono whitespace-nowrap">
+                      {row.recording_started_at ? new Date(row.recording_started_at).toLocaleTimeString() : '—'}
+                    </td>
+                    <td className="px-5 py-3 text-text-muted font-mono whitespace-nowrap">
+                      {row.recording_ended_at ? new Date(row.recording_ended_at).toLocaleTimeString() : '—'}
                     </td>
                     <td className="px-5 py-3">
                       <span className="font-bold capitalize" style={{ color: EMOTION_COLORS[row.fused_emotion] || 'inherit' }}>

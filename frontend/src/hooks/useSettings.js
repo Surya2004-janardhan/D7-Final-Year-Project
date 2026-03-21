@@ -3,6 +3,7 @@
  * Falls back to sane defaults in browser/non-Electron environments.
  */
 import { useState, useEffect, useCallback } from 'react';
+import { logError, logInfo } from '../utils/logger';
 
 const DEFAULT_SETTINGS = {
   autoMode: false,
@@ -27,6 +28,7 @@ export default function useSettings() {
       if (ipc) {
         const saved = await ipc.invoke('load-settings');
         setSettings({ ...DEFAULT_SETTINGS, ...saved });
+        logInfo('settings', 'settings loaded', saved);
       }
       setLoaded(true);
     };
@@ -40,6 +42,7 @@ export default function useSettings() {
     if (ipc) {
       await ipc.invoke('save-settings', next);
     }
+    logInfo('settings', 'settings saved', patch);
     return next;
   }, [settings]);
 
@@ -51,6 +54,7 @@ export default function useSettings() {
     };
     setSettings(next);
     if (ipc) await ipc.invoke('save-settings', next);
+    logInfo('settings', 'music mapping saved', { emotion, filePath });
   }, [settings]);
 
   // Convenience: save to Flask SQLite too (keeps both in sync)
@@ -59,7 +63,7 @@ export default function useSettings() {
       const axios = await import('axios');
       await axios.default.post('/mappings', { emotion, music_path: filePath });
     } catch(e) {
-      console.warn('Failed to sync mapping to backend:', e);
+      logError('settings', 'failed to sync mapping to backend', { emotion, filePath, error: e.message });
     }
   }, []);
 
