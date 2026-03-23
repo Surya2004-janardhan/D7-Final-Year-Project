@@ -21,6 +21,11 @@ import { Brain, LayoutDashboard, CalendarRange, SlidersHorizontal, MessageCircle
 const ipc = typeof window !== 'undefined' && window.require
   ? window.require('electron').ipcRenderer
   : null;
+const BACKEND_BASE_URL = 'http://127.0.0.1:5000';
+
+function hasUsableMusicPath(musicPath) {
+  return typeof musicPath === 'string' && /[\\/]/.test(musicPath);
+}
 
 export default function App() {
   const recorder = useMediaRecorder();
@@ -33,6 +38,7 @@ export default function App() {
   const [manualPreviewUrl, setManualPreviewUrl] = useState(null);
   const [lastDaemonResult, setLastDaemonResult] = useState(null);
   const [musicNowPlaying, setMusicNowPlaying] = useState(null);
+  const [shiftToast, setShiftToast] = useState(null);
   const daemonVideoRef = useRef(null);
   const audioRef = useRef(null);
   const musicQueueRef = useRef([]);
@@ -45,16 +51,29 @@ export default function App() {
     const nextTrack = musicQueueRef.current.shift();
     if (!nextTrack) return;
 
+    if (!hasUsableMusicPath(nextTrack.musicPath)) {
+      logError('app', 'support track path is invalid', { emotion: nextTrack.emotion, musicPath: nextTrack.musicPath });
+      setShiftToast({
+        emotion: nextTrack.emotion,
+        autoPlay: false,
+        musicPath: nextTrack.musicPath,
+        error: 'Please remap this emotion to a local audio file from Settings.',
+      });
+      setTimeout(() => tryPlayNext(), 150);
+      return;
+    }
+
     musicPlayingRef.current = true;
     setMusicNowPlaying(nextTrack);
-    const src = `/stream_local?path=${encodeURIComponent(nextTrack.musicPath)}`;
+    const src = `${BACKEND_BASE_URL}/stream_local?path=${encodeURIComponent(nextTrack.musicPath)}`;
 
     audio.src = src;
     logInfo('app', 'attempting in-app song playback', { emotion: nextTrack.emotion, musicPath: nextTrack.musicPath, src });
-    audio.play().catch(() => {
+    audio.load();
+    audio.play().catch((error) => {
       musicPlayingRef.current = false;
       setMusicNowPlaying(null);
-      logError('app', 'in-app song playback failed', { emotion: nextTrack.emotion, musicPath: nextTrack.musicPath });
+      logError('app', 'in-app song playback failed', { emotion: nextTrack.emotion, musicPath: nextTrack.musicPath, error: error?.message });
     });
   }, []);
 
@@ -63,6 +82,7 @@ export default function App() {
     onNewResult: (result) => setLastDaemonResult(result),
     onShiftDetected: ({ emotion, musicPath, autoPlay }) => {
       logInfo('app', 'shift detected', { emotion, musicPath, autoPlay });
+      setShiftToast({ emotion, musicPath, autoPlay, error: null });
       if (!autoPlay || !musicPath) return;
       musicQueueRef.current.push({ emotion, musicPath, at: Date.now() });
       tryPlayNext();
@@ -98,6 +118,29 @@ export default function App() {
       audio.removeEventListener('error', handleStop);
     };
   }, [tryPlayNext]);
+
+  useEffect(() => {
+    if (!ipc) return undefined;
+    const handleShiftToast = (_event, payload) => {
+      setShiftToast({
+        emotion: payload?.emotion,
+        musicPath: payload?.musicPath,
+        autoPlay: payload?.autoPlay,
+        error: null,
+      });
+    };
+
+    ipc.on('shift-toast', handleShiftToast);
+    return () => {
+      ipc.removeListener('shift-toast', handleShiftToast);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!shiftToast) return undefined;
+    const timer = setTimeout(() => setShiftToast(null), 10000);
+    return () => clearTimeout(timer);
+  }, [shiftToast]);
 
   useEffect(() => {
     return () => {
@@ -196,6 +239,36 @@ export default function App() {
   return (
     <div className="flex h-screen overflow-hidden bg-bg-base text-text-primary">
       <InterventionPopup results={activeInsight} />
+      {shiftToast && (
+        <div className="fixed top-4 right-4 z-50 w-[min(92vw,380px)] animate-fade-up">
+          <div className="rounded-2xl border border-primary/20 bg-surface-base/95 backdrop-blur-xl shadow-2xl p-4 space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">Emotional Shift</p>
+                <p className="text-sm font-black capitalize text-text-primary">{shiftToast.emotion || 'Unknown'}</p>
+              </div>
+              <button
+                onClick={() => setShiftToast(null)}
+                className="w-8 h-8 rounded-lg border border-border-subtle text-text-muted hover:text-text-primary hover:bg-surface-raised cursor-pointer"
+              >
+                ×
+              </button>
+            </div>
+            <p className="text-xs leading-relaxed text-text-secondary">
+              {shiftToast.error
+                ? shiftToast.error
+                : shiftToast.autoPlay
+                  ? 'Support playback was triggered for this emotion.'
+                  : 'Support playback is ready. Open the app and start it when you need it.'}
+            </p>
+            {shiftToast.musicPath && (
+              <p className="text-[11px] font-mono text-text-muted truncate" title={shiftToast.musicPath}>
+                {shiftToast.musicPath}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       <aside className="w-56 shrink-0 flex flex-col border-r border-border-subtle bg-surface-base">
         <div className="flex items-center gap-2.5 px-5 py-5 border-b border-border-subtle">
@@ -310,30 +383,48 @@ export default function App() {
               )}
 
               {isDaemonActive && (daemonStatus === 'recording' || daemonStatus === 'processing') && (
-                <div className="panel p-5 border border-primary/30">
-                  <div className="flex items-center gap-2 mb-3">
+                <div className="panel p-5 border border-primary/30 bg-gradient-to-br from-surface-base to-surface-raised">
+                  <div className="flex items-center justify-between gap-3 mb-4">
+                    <div className="flex items-center gap-2">
                     <Activity className="w-4 h-4 text-primary animate-pulse" />
                     <span className="text-xs font-bold uppercase tracking-widest text-text-primary">
                       {daemonStatus === 'recording' ? 'Background Recording Live' : 'Recording Complete · Processing'}
                     </span>
                   </div>
-                  <div className="relative rounded-xl overflow-hidden border border-border-subtle bg-black/70">
+                    <div className="px-3 py-1 rounded-full bg-surface-base border border-border-subtle text-[11px] font-bold text-text-secondary">
+                      {daemonStatus === 'recording' ? 'Mic + camera in use' : 'Backend analyzing clip'}
+                    </div>
+                  </div>
+                  <div className="relative rounded-2xl overflow-hidden border border-border-subtle bg-slate-950">
                     {daemonStatus === 'recording' ? (
                       <video
                         ref={daemonVideoRef}
                         autoPlay
                         muted
                         playsInline
-                        className="w-full max-h-[300px] object-cover"
-                        style={{ transform: 'scaleX(-1)' }}
+                        className="w-full max-h-[280px] object-cover"
                       />
                     ) : (
-                      <div className="h-[180px] flex items-center justify-center text-sm text-white/80">
-                        Processing captured stream in background...
+                      <div className="h-[220px] flex flex-col items-center justify-center text-center gap-3 text-sm text-white/80 px-6">
+                        <div className="w-12 h-12 rounded-full border-2 border-primary/40 border-t-primary animate-spin" />
+                        <div>
+                          <p className="font-semibold text-white">Processing captured stream in background</p>
+                          <p className="text-xs text-white/60 mt-1">The next wait cycle is already running while Flask completes this analysis.</p>
+                        </div>
                       </div>
                     )}
-                    <div className="absolute top-3 right-3 px-3 py-1 rounded-md bg-black/60 text-[11px] font-bold text-white uppercase tracking-wider">
-                      {daemonStatus}
+                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 to-transparent px-4 py-4">
+                      <div className="flex items-end justify-between gap-3">
+                        <div>
+                          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">Auto Monitor</p>
+                          <p className="text-sm font-semibold text-white">
+                            {daemonStatus === 'recording' ? 'Live capture is active' : 'Capture finished, results incoming'}
+                          </p>
+                        </div>
+                        <div className="px-3 py-1 rounded-full bg-black/55 text-[11px] font-bold text-white uppercase tracking-wider">
+                          {daemonStatus}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>

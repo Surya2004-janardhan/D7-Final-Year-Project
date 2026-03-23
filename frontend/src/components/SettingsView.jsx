@@ -1,19 +1,20 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Music, Upload, CheckCircle2, SlidersHorizontal } from 'lucide-react';
 
 const EMOTIONS = ['neutral', 'happy', 'sad', 'angry', 'fearful', 'disgust', 'surprised'];
+const ipc = typeof window !== 'undefined' && window.require
+  ? window.require('electron').ipcRenderer
+  : null;
 
 export default function SettingsView({ settings, onSave }) {
   const [saveStatus, setSaveStatus] = useState({});
+  const fileInputRefs = useRef({});
 
   const set = async (patch) => {
     await onSave(patch);
   };
 
-  const handleMusicFile = async (emotion, e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const filePath = file.path || file.name;
+  const persistMusicFile = async (emotion, filePath) => {
     setSaveStatus(s => ({ ...s, [emotion]: 'saving' }));
     try {
       const prev = settings.musicMappings || {};
@@ -31,6 +32,28 @@ export default function SettingsView({ settings, onSave }) {
     } catch {
       setSaveStatus(s => ({ ...s, [emotion]: 'error' }));
     }
+  };
+
+  const handleMusicFile = async (emotion, e) => {
+    const file = e.target.files?.[0];
+    const filePath = file?.path;
+    if (!filePath) {
+      setSaveStatus(s => ({ ...s, [emotion]: 'error' }));
+      return;
+    }
+    await persistMusicFile(emotion, filePath);
+    e.target.value = '';
+  };
+
+  const handleChooseMusic = async (emotion) => {
+    if (!ipc) {
+      fileInputRefs.current[emotion]?.click();
+      return;
+    }
+
+    const picked = await ipc.invoke('pick-music-file');
+    if (!picked || picked.canceled || !picked.filePath) return;
+    await persistMusicFile(emotion, picked.filePath);
   };
 
   return (
@@ -135,13 +158,21 @@ export default function SettingsView({ settings, onSave }) {
               </div>
 
               <div className="relative shrink-0">
-                <input
-                  type="file"
-                  accept="audio/*"
-                  className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
-                  onChange={e => handleMusicFile(emotion, e)}
-                />
-                <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-bold pointer-events-none transition-colors">
+                {!ipc && (
+                  <input
+                    ref={(node) => {
+                      fileInputRefs.current[emotion] = node;
+                    }}
+                    type="file"
+                    accept="audio/*"
+                    className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+                    onChange={e => handleMusicFile(emotion, e)}
+                  />
+                )}
+                <button
+                  onClick={() => handleChooseMusic(emotion)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-bold transition-colors cursor-pointer hover:opacity-90"
+                >
                   {status === 'saving' ? (
                     <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   ) : status === 'saved' ? (

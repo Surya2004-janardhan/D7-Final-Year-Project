@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain, Notification, nativeImage, shell, session } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, Notification, nativeImage, shell, session, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const net = require('net');
@@ -222,6 +222,29 @@ function setupIPC() {
     return { ok };
   });
 
+  ipcMain.handle('pick-music-file', async () => {
+    const response = await dialog.showOpenDialog(mainWindow, {
+      title: 'Choose support audio',
+      properties: ['openFile'],
+      filters: [
+        { name: 'Audio', extensions: ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac'] },
+      ],
+    });
+
+    if (response.canceled || !response.filePaths?.length) {
+      mainLog('settings', 'music picker cancelled');
+      return { canceled: true };
+    }
+
+    const filePath = response.filePaths[0];
+    mainLog('settings', 'music file selected', { filePath });
+    return {
+      canceled: false,
+      filePath,
+      fileName: path.basename(filePath),
+    };
+  });
+
   // History (results log)
   ipcMain.handle('load-results', () => {
     try {
@@ -288,6 +311,13 @@ function setupIPC() {
   ipcMain.handle('notify-shift', (_e, { emotion, autoPlay, musicPath }) => {
     mainLog('notify', 'notify-shift received', { emotion, autoPlay, musicPath });
     if (!Notification.isSupported()) return { ok: false, error: 'Notification not supported' };
+
+    mainWindow?.webContents.send('shift-toast', {
+      emotion,
+      autoPlay,
+      musicPath,
+      ts: new Date().toISOString(),
+    });
 
     const notif = new Notification({
       title: 'EmotionAI – Emotional Shift',
