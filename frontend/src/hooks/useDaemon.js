@@ -45,6 +45,14 @@ export default function useDaemon({ settings, onNewResult, onShiftDetected }) {
   const settingsRef = useRef(settings);
   useEffect(() => { settingsRef.current = settings; }, [settings]);
 
+  const clearPendingWait = useCallback(() => {
+    clearTimeout(timeoutRef.current);
+    clearInterval(countdownRef.current);
+    timeoutRef.current = null;
+    countdownRef.current = null;
+    setNextFireIn(null);
+  }, []);
+
   const evaluateMediaAccess = useCallback(async () => {
     const state = await queryMediaPermissionState();
     const bothGranted = state.camera === 'granted' && state.microphone === 'granted';
@@ -63,6 +71,7 @@ export default function useDaemon({ settings, onNewResult, onShiftDetected }) {
       if (!activeRef.current) return;
       const bothGranted = state.camera === 'granted' && state.microphone === 'granted';
       if (!bothGranted) {
+        clearPendingWait();
         setDaemonStatus('permission_required');
       } else if (activeRef.current) {
         setDaemonStatus((current) => {
@@ -84,7 +93,7 @@ export default function useDaemon({ settings, onNewResult, onShiftDetected }) {
       active = false;
       clearInterval(intervalId);
     };
-  }, [evaluateMediaAccess]);
+  }, [evaluateMediaAccess, clearPendingWait]);
 
   const requestStream = async () => {
     try {
@@ -237,10 +246,11 @@ export default function useDaemon({ settings, onNewResult, onShiftDetected }) {
       const { state: permissionState, bothGranted } = await evaluateMediaAccess();
 
       if (!bothGranted) {
+        clearPendingWait();
         setDaemonStatus('permission_required');
         keepPausedStatus = true;
         logInfo('daemon', 'session paused waiting for camera+microphone permission', permissionState);
-        return;
+        return 'paused_permission';
       }
 
       startedAt = new Date().toISOString();
@@ -260,18 +270,24 @@ export default function useDaemon({ settings, onNewResult, onShiftDetected }) {
         startedAt,
         endedAt,
       });
+      return 'completed';
     } catch (err) {
       if (err?.mediaKind === 'device_busy') {
+        clearPendingWait();
         setDaemonStatus('paused_device_busy');
         keepPausedStatus = true;
         logInfo('daemon', 'session paused because camera or microphone is busy', { error: err.message });
+        return 'paused_device_busy';
       } else if (err?.mediaKind === 'permission_denied') {
+        clearPendingWait();
         setDaemonStatus('permission_required');
         permissionGateRef.current = 'denied';
         keepPausedStatus = true;
         logInfo('daemon', 'session paused because permission was denied', { error: err.message });
+        return 'paused_permission';
       } else {
         logError('daemon', 'session error', { error: err.message });
+        return 'error';
       }
     } finally {
       releaseStream(stream);
@@ -279,7 +295,7 @@ export default function useDaemon({ settings, onNewResult, onShiftDetected }) {
         setDaemonStatus('waiting');
       }
     }
-  }, [recordForDuration, processRecordingInBackground, evaluateMediaAccess]);
+  }, [recordForDuration, processRecordingInBackground, evaluateMediaAccess, clearPendingWait]);
 
   const beginCountdown = useCallback((intervalMs) => {
     clearInterval(countdownRef.current);
@@ -299,13 +315,15 @@ export default function useDaemon({ settings, onNewResult, onShiftDetected }) {
     await new Promise((resolve) => {
       timeoutRef.current = setTimeout(resolve, intervalMs);
     });
+    timeoutRef.current = null;
 
     if (!activeRef.current) return;
     clearInterval(countdownRef.current);
     setNextFireIn(null);
-    await runSession();
+    const sessionResult = await runSession();
 
     if (!activeRef.current) return;
+    if (sessionResult === 'paused_permission' || sessionResult === 'paused_device_busy') return;
     loopRef.current?.();
   };
 
@@ -333,8 +351,7 @@ export default function useDaemon({ settings, onNewResult, onShiftDetected }) {
   const stopDaemon = useCallback(() => {
     logInfo('daemon', 'daemon stop requested');
     activeRef.current = false;
-    clearTimeout(timeoutRef.current);
-    clearInterval(countdownRef.current);
+    clearPendingWait();
 
     if (recordingRef.current && recordingRef.current.state === 'recording') {
       recordingRef.current.stop();
@@ -344,16 +361,15 @@ export default function useDaemon({ settings, onNewResult, onShiftDetected }) {
     setDaemonStatus('idle');
     setNextFireIn(null);
     setLiveStream(null);
-  }, []);
+  }, [clearPendingWait]);
 
   useEffect(() => {
     return () => {
       activeRef.current = false;
-      clearTimeout(timeoutRef.current);
-      clearInterval(countdownRef.current);
+      clearPendingWait();
       processingTasksRef.current.clear();
     };
-  }, []);
+  }, [clearPendingWait]);
 
   return {
     isDaemonActive,
