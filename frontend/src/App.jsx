@@ -54,6 +54,7 @@ export default function App() {
   const [currentTab, setCurrentTab] = useState("dashboard");
   const [lastDaemonResult, setLastDaemonResult] = useState(null);
   const [musicNowPlaying, setMusicNowPlaying] = useState(null);
+  const [pausedForMusic, setPausedForMusic] = useState(false);
   const [permissionReady, setPermissionReady] = useState(false);
   const [permissionError, setPermissionError] = useState(null);
   const [testNotifyBusy, setTestNotifyBusy] = useState(false);
@@ -61,6 +62,7 @@ export default function App() {
   const audioRef = useRef(null);
   const musicQueueRef = useRef([]);
   const musicPlayingRef = useRef(false);
+  const memeTimeoutRef = useRef(null);
   const activeInsight = lastDaemonResult;
 
   const tryPlayNext = useCallback(() => {
@@ -76,6 +78,15 @@ export default function App() {
       });
       setTimeout(() => tryPlayNext(), 150);
       return;
+    }
+
+    // Pause background daemon before playback to ensure we don't record the song
+    try {
+      stopDaemon();
+      setPausedForMusic(true);
+      logInfo('app', 'auto monitoring paused for music playback (tryPlayNext)');
+    } catch (err) {
+      logError('app', 'failed to pause daemon before playback', { error: err?.message });
     }
 
     musicPlayingRef.current = true;
@@ -155,6 +166,7 @@ export default function App() {
       // When a support song starts, pause/stop background recording to avoid capturing music
       try {
         stopDaemon();
+        setPausedForMusic(true);
         logInfo("app", "auto monitoring paused for music playback");
       } catch (err) {
         logError("app", "failed to pause daemon on music start", {
@@ -170,6 +182,27 @@ export default function App() {
             autoPlay: false,
             musicPath: musicNowPlaying?.musicPath || null,
           });
+          // Schedule a follow-up meme-rich notification after 5s
+          try {
+            if (memeTimeoutRef.current) {
+              clearTimeout(memeTimeoutRef.current);
+              memeTimeoutRef.current = null;
+            }
+            const meme = lastDaemonResult?.memes?.[0] || null;
+            if (meme) {
+              memeTimeoutRef.current = setTimeout(() => {
+                  try {
+                    ipc.invoke('notify-shift', {
+                      emotion: musicNowPlaying?.emotion || 'music',
+                      autoPlay: false,
+                      musicPath: musicNowPlaying?.musicPath || null,
+                      meme,
+                      memeOnly: true,
+                    });
+                  } catch (e) { /* ignore */ }
+              }, 20000); // show meme-only notification after 20s
+            }
+          } catch (e) { /* ignore scheduling errors */ }
         } catch (err) {
           // ignore
         }
@@ -180,9 +213,14 @@ export default function App() {
       musicPlayingRef.current = false;
       setMusicNowPlaying(null);
       logInfo("app", "song playback finished or reset");
+      if (memeTimeoutRef.current) {
+        clearTimeout(memeTimeoutRef.current);
+        memeTimeoutRef.current = null;
+      }
       setTimeout(() => tryPlayNext(), 150);
       // Resume auto monitoring after the song ends if auto mode is enabled
       try {
+        setPausedForMusic(false);
         if (settings.autoMode) {
           startDaemon();
           logInfo("app", "auto monitoring resumed after music playback");
@@ -202,6 +240,54 @@ export default function App() {
       audio.removeEventListener("ended", handleStop);
       audio.removeEventListener("error", handleStop);
     };
+  }, [tryPlayNext]);
+
+  // Listen for notification action responses from main process
+  useEffect(() => {
+    if (!ipc) return undefined;
+    const handler = (_e, { action, emotion, musicPath }) => {
+      try {
+        if (action === "play" && musicPath) {
+          // Pause background daemon immediately and mark pausedForMusic
+          try {
+            stopDaemon();
+            setPausedForMusic(true);
+            logInfo('app', 'daemon paused in response to notification Play');
+          } catch (err) {
+            logError('app', 'failed to pause daemon on notification Play', { error: err?.message });
+          }
+
+          // Clear any scheduled meme notification
+          try {
+            if (memeTimeoutRef.current) {
+              clearTimeout(memeTimeoutRef.current);
+              memeTimeoutRef.current = null;
+            }
+          } catch (e) { /* ignore */ }
+
+          // Ensure playback can start: clear stale flag, queue track, and attempt immediate play
+          musicPlayingRef.current = false;
+          musicQueueRef.current.push({ emotion, musicPath, at: Date.now() });
+          logInfo("app", "user approved playback from notification", { emotion, musicPath });
+
+          tryPlayNext();
+          try {
+            const a = audioRef.current;
+            if (a && a.paused && a.src) {
+              a.play().catch(() => {});
+            }
+          } catch (e) { /* ignore */ }
+        } else {
+          logInfo("app", "user declined playback from notification", { emotion });
+        }
+      } catch (err) {
+        logError("app", "notification-action handler error", {
+          error: err?.message,
+        });
+      }
+    };
+    ipc.on("notification-action", handler);
+    return () => ipc.removeListener("notification-action", handler);
   }, [tryPlayNext]);
 
   useEffect(() => {
@@ -342,6 +428,7 @@ export default function App() {
       musicPlayingRef.current = false;
       setMusicNowPlaying(null);
       logInfo("app", "support playback stopped by user");
+      setPausedForMusic(false);
       if (settings.autoMode) {
         startDaemon();
         logInfo("app", "auto monitoring resumed after manual stop");
@@ -499,7 +586,24 @@ export default function App() {
                 recordDurationLabel={formatMinutesLabel(
                   settings.recordDurationMinutes,
                 )}
+                settings={settings}
+                save={save}
+                pausedForMusic={pausedForMusic}
               />
+
+              {musicNowPlaying && (
+                <div className="flex items-center gap-3">
+                  <p className="text-sm text-primary font-semibold">
+                    Now playing: {musicNowPlaying.emotion}
+                  </p>
+                  <button
+                    onClick={stopMusicNow}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-red-50 text-red-600 border border-red-200 hover:opacity-90"
+                  >
+                    Stop Music
+                  </button>
+                </div>
+              )}
 
               {lastDaemonResult && (
                 <div className="panel p-5 border border-border-subtle animate-fade-up">

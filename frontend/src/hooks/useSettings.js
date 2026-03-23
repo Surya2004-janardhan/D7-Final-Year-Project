@@ -2,21 +2,23 @@
  * useSettings — Persistent app settings via Electron IPC (userData/settings.json)
  * Falls back to sane defaults in browser/non-Electron environments.
  */
-import { useState, useEffect, useCallback } from 'react';
-import { logError, logInfo } from '../utils/logger';
+import { useState, useEffect, useCallback } from "react";
+import { logError, logInfo } from "../utils/logger";
 
 const DEFAULT_SETTINGS = {
   autoMode: false,
   intervalMinutes: 15,
   recordDurationMinutes: 5,
-  notifyPermission: 'ask',   // 'ask' | 'auto'
-  musicMappings: {},         // { emotion: absoluteFilePath }
+  notifyPermission: "ask", // 'ask' | 'auto'
+  musicMappings: {}, // { emotion: absoluteFilePath }
+  mirrorPreview: false, // show small mirror preview while recording
 };
 
 // Check if we're inside Electron with IPC available
-const ipc = typeof window !== 'undefined' && window.require
-  ? window.require('electron').ipcRenderer
-  : null;
+const ipc =
+  typeof window !== "undefined" && window.require
+    ? window.require("electron").ipcRenderer
+    : null;
 
 export default function useSettings() {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
@@ -26,9 +28,9 @@ export default function useSettings() {
   useEffect(() => {
     const load = async () => {
       if (ipc) {
-        const saved = await ipc.invoke('load-settings');
+        const saved = await ipc.invoke("load-settings");
         setSettings({ ...DEFAULT_SETTINGS, ...saved });
-        logInfo('settings', 'settings loaded', saved);
+        logInfo("settings", "settings loaded", saved);
       }
       setLoaded(true);
     };
@@ -36,34 +38,44 @@ export default function useSettings() {
   }, []);
 
   // Save whenever settings change (after initial load)
-  const save = useCallback(async (patch) => {
-    const next = { ...settings, ...patch };
-    setSettings(next);
-    if (ipc) {
-      await ipc.invoke('save-settings', next);
-    }
-    logInfo('settings', 'settings saved', patch);
-    return next;
-  }, [settings]);
+  const save = useCallback(
+    async (patch) => {
+      const next = { ...settings, ...patch };
+      setSettings(next);
+      if (ipc) {
+        await ipc.invoke("save-settings", next);
+      }
+      logInfo("settings", "settings saved", patch);
+      return next;
+    },
+    [settings],
+  );
 
   // Convenience: save a single music mapping
-  const saveMusicMapping = useCallback(async (emotion, filePath) => {
-    const next = {
-      ...settings,
-      musicMappings: { ...settings.musicMappings, [emotion]: filePath }
-    };
-    setSettings(next);
-    if (ipc) await ipc.invoke('save-settings', next);
-    logInfo('settings', 'music mapping saved', { emotion, filePath });
-  }, [settings]);
+  const saveMusicMapping = useCallback(
+    async (emotion, filePath) => {
+      const next = {
+        ...settings,
+        musicMappings: { ...settings.musicMappings, [emotion]: filePath },
+      };
+      setSettings(next);
+      if (ipc) await ipc.invoke("save-settings", next);
+      logInfo("settings", "music mapping saved", { emotion, filePath });
+    },
+    [settings],
+  );
 
   // Convenience: save to Flask SQLite too (keeps both in sync)
   const syncMappingToBackend = useCallback(async (emotion, filePath) => {
     try {
-      const axios = await import('axios');
-      await axios.default.post('/mappings', { emotion, music_path: filePath });
-    } catch(e) {
-      logError('settings', 'failed to sync mapping to backend', { emotion, filePath, error: e.message });
+      const axios = await import("axios");
+      await axios.default.post("/mappings", { emotion, music_path: filePath });
+    } catch (e) {
+      logError("settings", "failed to sync mapping to backend", {
+        emotion,
+        filePath,
+        error: e.message,
+      });
     }
   }, []);
 

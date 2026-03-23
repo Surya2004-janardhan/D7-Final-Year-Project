@@ -1,4 +1,5 @@
 import { Activity, Camera, Mic, ShieldCheck } from "lucide-react";
+import { useEffect, useRef } from "react";
 
 export default function RecordingPanel({
   autoMode,
@@ -9,12 +10,64 @@ export default function RecordingPanel({
   requestPermission,
   intervalLabel,
   recordDurationLabel,
+  settings,
+  save,
+  pausedForMusic,
 }) {
   const isRecording = daemonStatus === "recording";
   const isWaiting = daemonStatus === "waiting";
   const isPermissionRequired = daemonStatus === "permission_required";
   const isDeviceBusy = daemonStatus === "paused_device_busy";
   const isProcessing = daemonStatus === "processing";
+
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const startPreview = async () => {
+      try {
+        const s = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false,
+        });
+        if (!mounted) {
+          s.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        streamRef.current = s;
+        if (videoRef.current) {
+          videoRef.current.srcObject = s;
+          try {
+            await videoRef.current.play();
+          } catch (e) {
+            /* ignore */
+          }
+        }
+      } catch (err) {
+        // ignore preview errors
+      }
+    };
+
+    if (isRecording && settings?.mirrorPreview) {
+      startPreview();
+    } else {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+      }
+      if (videoRef.current) videoRef.current.srcObject = null;
+    }
+
+    return () => {
+      mounted = false;
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+      }
+      if (videoRef.current) videoRef.current.srcObject = null;
+    };
+  }, [isRecording, settings?.mirrorPreview]);
 
   const headline = isRecording
     ? "Background capture is running"
@@ -51,7 +104,7 @@ export default function RecordingPanel({
               Auto Monitoring
             </p>
             <h2 className="text-lg font-black text-text-primary">
-              Background Emotion based Stress Tracking
+              Emotion based Stress Tracking
             </h2>
           </div>
           <div
@@ -101,7 +154,9 @@ export default function RecordingPanel({
             </div>
 
             <div className="space-y-2">
-              <p className="text-text-primary text-base font-bold">{headline}</p>
+              <p className="text-text-primary text-base font-bold">
+                {headline}
+              </p>
               <p className="text-text-secondary text-sm leading-relaxed">
                 {subline}
               </p>
@@ -162,9 +217,44 @@ export default function RecordingPanel({
                 )}
               </div>
             )}
+            <div className="mt-4 flex items-center justify-center gap-3">
+              <label className="flex items-center gap-2 text-sm text-text-secondary">
+                <input
+                  type="checkbox"
+                  checked={!!settings?.mirrorPreview}
+                  onChange={() =>
+                    save({ mirrorPreview: !settings?.mirrorPreview })
+                  }
+                />
+                Mirror Preview (while recording)
+              </label>
+            </div>
           </div>
         </div>
       </div>
+      {/* Mirror preview window — visible only when toggle is on and recording */}
+      {settings?.mirrorPreview && isRecording && (
+        <div
+          style={{
+            position: "fixed",
+            right: 16,
+            bottom: 16,
+            width: 180,
+            height: 140,
+            zIndex: 60,
+          }}
+        >
+          <div className="rounded-md overflow-hidden border border-border-subtle shadow-lg bg-black">
+            <video
+              id="mirror-preview"
+              ref={videoRef}
+              className="w-full h-full object-cover"
+              autoPlay
+              muted
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

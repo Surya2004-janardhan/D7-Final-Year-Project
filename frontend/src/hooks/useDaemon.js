@@ -159,12 +159,12 @@ export default function useDaemon({ settings, onNewResult, onShiftDetected }) {
     return changed && becameNegative;
   }, []);
 
-  const triggerNotification = useCallback(async (emotion) => {
+  const triggerNotification = useCallback(async (emotion, meme = null) => {
     const currentSettings = settingsRef.current || {};
     const autoPlay = currentSettings.notifyPermission === 'auto';
     const musicPath = currentSettings.musicMappings?.[emotion];
 
-    logInfo('daemon', 'trigger notification', { emotion, autoPlay, musicPath });
+    logInfo('daemon', 'trigger notification', { emotion, autoPlay, musicPath, hasMeme: !!meme });
 
     if (onShiftDetected) {
       onShiftDetected({ emotion, musicPath, autoPlay });
@@ -172,7 +172,7 @@ export default function useDaemon({ settings, onNewResult, onShiftDetected }) {
 
     if (ipc) {
       try {
-        await ipc.invoke('notify-shift', { emotion, autoPlay, musicPath });
+        await ipc.invoke('notify-shift', { emotion, autoPlay, musicPath, meme });
         logInfo('daemon', 'notification ipc sent');
       } catch (e) {
         logError('daemon', 'notification ipc failed', { error: e.message });
@@ -226,6 +226,7 @@ export default function useDaemon({ settings, onNewResult, onShiftDetected }) {
         if (onNewResult) onNewResult(enrichedResult);
 
         if (shouldNotify) {
+          // Fire the initial notification (ask/play) without embedding the meme
           await triggerNotification(emotion);
         } else {
           logInfo('daemon', 'notification skipped', {
