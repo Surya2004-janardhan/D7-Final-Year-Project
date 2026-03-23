@@ -320,7 +320,7 @@ function setupIPC() {
     });
 
     const notif = new Notification({
-      title: 'EmotionAI – Emotional Shift',
+      title: 'EmotionAI - Emotional Shift',
       body: autoPlay
         ? `Detected shift to ${emotion}. Playing your mapped playlist now.`
         : `Detected shift to ${emotion}. Click to play your mapped playlist.`,
@@ -378,7 +378,7 @@ function createWindow() {
     height: 800,
     minWidth: 960,
     minHeight: 640,
-    show: true,   // Show immediately — tray-only means minimize-to-tray on CLOSE, not hide on open
+    show: true,   // Show immediately; tray-only means minimize-to-tray on CLOSE, not hide on open
     frame: true,
     webPreferences: {
       nodeIntegration: true,
@@ -445,7 +445,7 @@ function createTray() {
     },
   ]);
 
-  tray.setToolTip('EmotionAI – Background Monitor');
+  tray.setToolTip('EmotionAI - Background Monitor');
   tray.setContextMenu(buildMenu());
 
   tray.on('click', () => {
@@ -463,7 +463,7 @@ app.whenReady().then(async () => {
   // Required for Windows native toast notifications to appear in Action Center
   app.setAppUserModelId('EmotionAI');
 
-  initPaths(); // Must be first — sets up file paths
+  initPaths(); // Must be first; sets up file paths
 
   setupMediaPermissions();
   setupIPC();
