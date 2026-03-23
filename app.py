@@ -1025,7 +1025,7 @@ def analyze_history():
         Explain whether the person looks steady, under pressure, or improving.
         Mention important emotional shifts during the day, week, or month.
         Give exactly 2 practical tips that fit a working employee who spends long hours in front of a laptop.
-        Avoid technical jargon, avoid clinical language, and do not use markdown.
+        Avoid technical jargon, avoid clinical language, and do not use markdown only one emoje at the end of each response.
         Start immediately.
         """
         
