@@ -457,10 +457,13 @@ function setupIPC() {
       if (!mainWindow) return;
       if (index === 0) {
         // User chose Play — instruct renderer to play the mapped music
+        // Forward the meme payload (if any) so the renderer can schedule
+        // the meme-only follow-up reliably.
         mainWindow.webContents.send("notification-action", {
           action: "play",
           emotion,
           musicPath,
+          meme: payload?.meme || null,
         });
       } else {
         // User chose No — inform renderer (no-op by default)

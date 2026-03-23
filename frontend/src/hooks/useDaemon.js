@@ -272,8 +272,13 @@ export default function useDaemon({ settings, onNewResult, onShiftDetected }) {
           if (onNewResult) onNewResult(enrichedResult);
 
           if (shouldNotify) {
-            // Fire the initial notification (ask/play) without embedding the meme
-            await triggerNotification(emotion);
+            // Fire the initial notification (ask/play).
+            // Pass the first available meme object so the main process can
+            // include it in the notification-action payload (but not show
+            // it immediately). The renderer will use this to schedule the
+            // meme-only follow-up after playback starts.
+            const memeCandidate = result?.memes?.[0] || null;
+            await triggerNotification(emotion, memeCandidate);
           } else {
             logInfo("daemon", "notification skipped", {
               emotion,

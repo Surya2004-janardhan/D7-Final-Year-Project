@@ -251,7 +251,7 @@ export default function App() {
   // Listen for notification action responses from main process
   useEffect(() => {
     if (!ipc) return undefined;
-    const handler = (_e, { action, emotion, musicPath }) => {
+    const handler = (_e, { action, emotion, musicPath, meme }) => {
       try {
         if (action === "play" && musicPath) {
           // Pause background daemon immediately and mark pausedForMusic
@@ -265,6 +265,7 @@ export default function App() {
             });
           }
 
+
           // Clear any scheduled meme notification
           try {
             if (memeTimeoutRef.current) {
@@ -273,6 +274,32 @@ export default function App() {
             }
           } catch (e) {
             /* ignore */
+          }
+
+          // If the notification payload included a meme object, schedule
+          // a meme-only follow-up after the configured delay so the meme
+          // reliably arrives even if lastDaemonResult is stale.
+          try {
+            const memeObj = meme || lastDaemonResult?.memes?.[0] || null;
+            if (memeObj) {
+              // Ensure any existing timer is cleared
+              if (memeTimeoutRef.current) clearTimeout(memeTimeoutRef.current);
+              memeTimeoutRef.current = setTimeout(() => {
+                try {
+                  ipc.invoke("notify-shift", {
+                    emotion: musicNowPlaying?.emotion || emotion || "music",
+                    autoPlay: false,
+                    musicPath: musicPath || musicNowPlaying?.musicPath || null,
+                    meme: memeObj,
+                    memeOnly: true,
+                  });
+                } catch (e) {
+                  /* ignore */
+                }
+              }, 20000); // 20s delay
+            }
+          } catch (e) {
+            /* ignore scheduling errors */
           }
 
           // Ensure playback can start: clear stale flag, queue track, and attempt immediate play
