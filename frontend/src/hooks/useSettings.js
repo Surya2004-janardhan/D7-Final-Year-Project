@@ -12,6 +12,7 @@ const DEFAULT_SETTINGS = {
   notifyPermission: "ask", // 'ask' | 'auto'
   musicMappings: {}, // { emotion: absoluteFilePath }
   mirrorPreview: false, // show small mirror preview while recording
+  groqApiKey: "", // per-user Groq API key for LLM features
 };
 
 // Check if we're inside Electron with IPC available

@@ -265,7 +265,6 @@ export default function App() {
             });
           }
 
-
           // Clear any scheduled meme notification
           try {
             if (memeTimeoutRef.current) {
@@ -420,6 +419,43 @@ export default function App() {
       setTestNotifyBusy(false);
     }
   }, [testNotifyBusy]);
+
+  const handleSendMemeTest = useCallback(async () => {
+    if (!ipc) return;
+    setTestNotifyBusy(true);
+    setTestNotifyStatus("");
+    logInfo("app", "manual meme notification test requested");
+    try {
+      const meme = {
+        template: "Test Template",
+        caption: "This is a meme test: keep calm and carry on coding.",
+        reason: "Used to validate meme-only follow-up notifications",
+      };
+      const result = await ipc.invoke("notify-shift", {
+        emotion: "test-meme",
+        autoPlay: false,
+        musicPath: null,
+        meme,
+        memeOnly: true,
+      });
+      if (result?.ok) {
+        setTestNotifyStatus("Meme notification sent.");
+        logInfo("app", "manual meme notification test succeeded");
+      } else {
+        setTestNotifyStatus(result?.error || "Meme notification failed.");
+        logError("app", "manual meme notification test failed", {
+          error: result?.error,
+        });
+      }
+    } catch (error) {
+      setTestNotifyStatus(error?.message || "Meme notification failed.");
+      logError("app", "manual meme notification test errored", {
+        error: error?.message,
+      });
+    } finally {
+      setTestNotifyBusy(false);
+    }
+  }, []);
 
   const daemonLabel =
     daemonStatus === "recording"
@@ -721,6 +757,14 @@ export default function App() {
                     <BellRing className="w-4 h-4" />
                   )}
                   Send Windows Notification
+                </button>
+
+                <button
+                  onClick={handleSendMemeTest}
+                  disabled={testNotifyBusy}
+                  className="ml-3 inline-flex items-center gap-2 px-4 py-3 rounded-xl bg-secondary text-white text-sm font-bold cursor-pointer hover:opacity-90 transition-all disabled:opacity-50"
+                >
+                  Send Meme Test
                 </button>
 
                 <p className="text-sm text-text-secondary leading-relaxed">
