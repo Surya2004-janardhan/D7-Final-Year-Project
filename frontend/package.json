@@ -8,7 +8,7 @@
     "appId": "com.emotionai.desktop",
     "productName": "EmotionAI",
     "directories": {
-      "output": "release"
+      "output": "build_final"
     },
     "files": [
       "dist/**/*",
@@ -17,6 +17,7 @@
       "public/**/*",
       "package.json"
     ],
+    "compression": "normal",
     "win": {
       "target": ["nsis", "portable"],
       "icon": "public/icon.jpg"
@@ -26,7 +27,15 @@
         "from": "../myenv",
         "to": "backend_env",
         "filter": [
-          "**/*"
+          "**/*",
+          "!**/__pycache__/*",
+          "!**/*.pyc",
+          "!**/*.pyo",
+          "!**/*.exe.stackdump",
+          "!**/test/*",
+          "!**/tests/*",
+          "!**/Include/*",
+          "!**/tcl/*"
         ]
       },
       {
