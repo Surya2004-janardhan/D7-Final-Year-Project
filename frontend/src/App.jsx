@@ -64,12 +64,12 @@ export default function App() {
     if (ipc) {
       ipc.invoke("get-backend-url").then((url) => {
         if (url) {
-          // Normalize URL with trailing slash for correct relative path joining in axios
+          // Normalize with trailing slash (works for both local and cloud)
           const normalizedUrl = url.endsWith("/") ? url : `${url}/`;
           axios.defaults.baseURL = normalizedUrl;
           BACKEND_BASE_URL = normalizedUrl;
           setBackendReady(true);
-          logInfo("app", "backend url configured", { url: normalizedUrl });
+          logInfo("app", "switched back to local backend", { url: normalizedUrl });
         }
       });
     } else {

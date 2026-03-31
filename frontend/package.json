@@ -21,6 +21,27 @@
       "target": ["nsis", "portable"],
       "icon": "public/icon.png"
     },
+    "extraFiles": [
+      {
+        "from": "../backend_env",
+        "to": "backend_env",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "../models",
+        "to": "models",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "../app.py",
+        "to": "app.py"
+      }
+    ],
+    "asar": true,
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
