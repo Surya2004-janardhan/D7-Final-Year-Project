@@ -126,23 +126,25 @@ function resolveBackendCommand() {
   // ── PRODUCTION (packaged Electron app) ──────────────────────────
   // electron-builder puts extraFiles in process.resourcesPath
   if (app.isPackaged) {
-    const bundledExe = path.join(process.resourcesPath, 'backend', 'backend.exe');
-    if (fs.existsSync(bundledExe)) {
-      mainLog('backend', 'using bundled backend.exe', { path: bundledExe });
-      return { cmd: bundledExe, args: [], cwd: path.dirname(bundledExe) };
+    const bundledPython = path.join(process.resourcesPath, 'backend_env', 'Scripts', 'python.exe');
+    const bundledApp    = path.join(process.resourcesPath, 'app.py');
+    
+    if (fs.existsSync(bundledPython)) {
+      mainLog('backend', 'using bundled python environment', { path: bundledPython });
+      return { 
+        cmd: bundledPython, 
+        args: [bundledApp], 
+        cwd: process.resourcesPath 
+      };
     }
   }
 
   // ── DEVELOPMENT fallback: python app.py ─────────────────────────
-  if (process.env.PYTHON_BIN) {
-    return { cmd: process.env.PYTHON_BIN, args: ['app.py'], cwd: BACKEND_CWD };
+  // Use local backend_env if it exists in the root
+  const localEnvPython = path.join(ROOT_CWD, 'backend_env', 'Scripts', 'python.exe');
+  if (fs.existsSync(localEnvPython)) {
+    return { cmd: localEnvPython, args: ['app.py'], cwd: BACKEND_CWD };
   }
-  const candidates = [
-    path.join(ROOT_CWD, '.venv', 'Scripts', 'python.exe'),
-    path.join(ROOT_CWD, 'venv', 'Scripts', 'python.exe'),
-    path.join(ROOT_CWD, 'myenv', 'Scripts', 'python.exe'),
-    'python',
-  ];
   for (const c of candidates) {
     if (c.includes(path.sep)) {
       if (fs.existsSync(c)) return { cmd: c, args: ['app.py'], cwd: BACKEND_CWD };
@@ -169,13 +171,26 @@ async function startBackend() {
   }
 
   return new Promise((resolve, reject) => {
-    mainLog('backend', 'spawning backend process');
-    pythonReady = false;
-    pythonReadyCallbacks = [];
+    // Set up logging to the UserData folder to debug the packaged exe
+    const logPath = path.join(USER_DATA, "backend.log");
+    const logStream = fs.createWriteStream(logPath, { flags: "a" });
+    const startTime = new Date().toISOString();
+    logStream.write(`\n--- Backend Start ${startTime} ---\n`);
 
     const { cmd, args, cwd } = resolveBackendCommand();
-    mainLog('backend', 'backend command resolved', { cmd, args, cwd });
-    pythonProcess = spawn(cmd, args, { cwd });
+    mainLog('backend', 'backend command resolved', { cmd, args, cwd, logPath });
+    
+    // Pass USER_DATA so the backend knows where to save the DB safely on Windows
+    const env = { 
+      ...process.env, 
+      USER_DATA_PATH: USER_DATA,
+      PYTHONIOENCODING: "utf-8"
+    };
+
+    pythonProcess = spawn(cmd, args, { cwd, env });
+
+    pythonProcess.stdout.pipe(logStream);
+    pythonProcess.stderr.pipe(logStream);
 
 
     const readyTimer = setTimeout(() => {

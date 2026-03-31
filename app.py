@@ -40,7 +40,10 @@ MUSIC_DIR = 'music'
 os.makedirs(MUSIC_DIR, exist_ok=True)
 EMOTIONS_7 = ['neutral', 'happy', 'sad', 'angry', 'fearful', 'disgust', 'surprised']
 
-DB_PATH = 'emotionai.db'
+# Dynamically resolve DB Path (use USER_DATA_PATH from Electron if available)
+USER_DATA = os.getenv('USER_DATA_PATH', os.getcwd())
+DB_PATH   = os.path.join(USER_DATA, 'emotionai.db')
+print(f"[EmotionAI] Using database at: {DB_PATH}")
 
 def get_db():
     conn = sqlite3.connect(DB_PATH)
@@ -79,11 +82,15 @@ def init_db():
 
 init_db()
 
-# Load models once at startup
+# Load models once at startup (using absolute paths for packaged app stability)
 print("Loading models...")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 try:
-    audio_model = keras.models.load_model('models/audio_emotion_model.h5')
-    video_model = keras.models.load_model('models/video_emotion_model.h5')
+    audio_model_path = os.path.join(BASE_DIR, 'models', 'audio_emotion_model.h5')
+    video_model_path = os.path.join(BASE_DIR, 'models', 'video_emotion_model.h5')
+    
+    audio_model = keras.models.load_model(audio_model_path)
+    video_model = keras.models.load_model(video_model_path)
     
     # Feature extractor for video
     base_cnn = keras.applications.MobileNetV2(weights='imagenet', include_top=False, input_shape=(112, 112, 3))
@@ -540,6 +547,7 @@ def update_job(job_id, *, progress=None, status=None, results=None):
     return state
 
 @app.route('/status', methods=['GET'])
+@app.route('/api/status', methods=['GET'])
 def get_status():
     job_id = request.args.get('job_id')
     if not job_id:
@@ -547,6 +555,7 @@ def get_status():
     return jsonify(progress_states.get(job_id, dict(DEFAULT_PROGRESS_STATE)))
 
 @app.route('/process', methods=['POST'])
+@app.route('/api/process', methods=['POST'])
 def process():
     job_id = request.form.get('job_id') or str(uuid4())
     progress_state = init_job(job_id)
@@ -865,11 +874,13 @@ def process():
         return jsonify({'error': str(e), 'job_id': job_id})
 
 @app.route('/downloaded_music/<path:filename>')
+@app.route('/api/downloaded_music/<path:filename>')
 def serve_music(filename):
     """Serve cached music files from the music/ directory."""
     return send_from_directory('music', filename)
 
 @app.route('/music/search', methods=['GET'])
+@app.route('/api/music/search', methods=['GET'])
 def music_search():
     """Search music for a song, cache it locally, and return local stream URL."""
     try:
@@ -951,6 +962,7 @@ def music_search():
 # --- SQLITE ENDPOINTS ---
 
 @app.route('/history', methods=['GET'])
+@app.route('/api/history', methods=['GET'])
 def get_history():
     """Fetch history for the calendar view."""
     try:
@@ -965,6 +977,7 @@ def get_history():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/history', methods=['DELETE'])
+@app.route('/api/history', methods=['DELETE'])
 def clear_history():
     """Clear history log."""
     try:
@@ -976,6 +989,7 @@ def clear_history():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/mappings', methods=['GET'])
+@app.route('/api/mappings', methods=['GET'])
 def get_mappings():
     """Get user-defined music mappings."""
     try:
@@ -986,6 +1000,7 @@ def get_mappings():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/mappings', methods=['POST'])
+@app.route('/api/mappings', methods=['POST'])
 def save_mapping():
     """Save or update a music mapping."""
     try:
@@ -1003,6 +1018,7 @@ def save_mapping():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/analyze_history', methods=['POST'])
+@app.route('/api/analyze_history', methods=['POST'])
 def analyze_history():
     """Generate a simple-English stress trend report from historical readings."""
     try:
@@ -1058,6 +1074,7 @@ def analyze_history():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/stream_local', methods=['GET'])
+@app.route('/api/stream_local', methods=['GET'])
 def stream_local():
     """Stream an absolute local file path for Emotion intervention playback."""
     file_path = request.args.get('path')
@@ -1066,6 +1083,7 @@ def stream_local():
     return send_file(file_path)
 
 @app.route('/chat', methods=['POST'])
+@app.route('/api/chat', methods=['POST'])
 def chat():
     """Personalized assistant for current and time-based stress analysis."""
     try:

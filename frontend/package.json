@@ -19,11 +19,11 @@
     ],
     "win": {
       "target": ["nsis", "portable"],
-      "icon": "public/icon.png"
+      "icon": "public/icon.jpg"
     },
     "extraFiles": [
       {
-        "from": "../backend_env",
+        "from": "../myenv",
         "to": "backend_env",
         "filter": [
           "**/*"
@@ -39,6 +39,10 @@
       {
         "from": "../app.py",
         "to": "app.py"
+      },
+      {
+        "from": "../ffmpeg.exe",
+        "to": "ffmpeg.exe"
       }
     ],
     "asar": true,
