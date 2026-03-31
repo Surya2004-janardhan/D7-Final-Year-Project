@@ -3,8 +3,7 @@
 
 # Core ML
 numpy==1.26.4
-tensorflow-cpu==2.15.1        # Latest stable that supports Python 3.10, ~200 MB
-keras==2.15.0
+tensorflow-cpu==2.18.0
 
 # Audio
 librosa==0.10.1
@@ -22,7 +21,9 @@ pydub==0.25.1
 # Web
 flask==3.0.3
 flask-cors==4.0.1
-gradio==4.44.0
+gradio>=5.0.0
+tensorflow-cpu==2.18.0
+keras==3.7.0
 requests==2.31.0
 
 # AI

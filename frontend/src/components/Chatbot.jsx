@@ -81,7 +81,7 @@ export default function Chatbot({ results, isOpen = true, onClose, mode = 'overl
         .filter((m, i) => i > 0)
         .slice(-80);
 
-      const res = await axios.post('/chat', {
+      const res = await axios.post('chat', {
         message: userMsg.content,
         context: results || {},
         history,

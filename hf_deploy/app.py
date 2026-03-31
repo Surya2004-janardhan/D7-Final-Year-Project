@@ -32,7 +32,7 @@ import ffmpeg as ffmpeg_lib
 
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
-from tensorflow import keras
+import keras
 import gradio as gr
 
 # ── Flask App ─────────────────────────────────────────────────
@@ -75,19 +75,71 @@ def init_db():
 
 init_db()
 
+# ── Robust Model Loader ──────────────────────────────────────
+# Fixes version-specific deserialization errors like 'quantization_config' or 'batch_shape'
+def robust_load_model(path):
+    from keras import layers
+    
+    # Custom Dense to ignore quantization_config
+    original_dense_from_config = layers.Dense.from_config
+    @classmethod
+    def dense_from_config(cls, config):
+        config.pop('quantization_config', None)
+        return original_dense_from_config(config)
+    
+    # Custom InputLayer to ignore batch_shape and fix dimensions
+    original_input_from_config = layers.InputLayer.from_config
+    @classmethod
+    def input_from_config(cls, config):
+        # Keras 3 'shape' = input dimensions EXCLUDING batch.
+        # Older models used 'batch_shape' which INCLUDED batch.
+        if 'batch_shape' in config:
+            bs = config.pop('batch_shape')
+            if isinstance(bs, list) and len(bs) > 0:
+                config['shape'] = bs[1:]
+        # Remove legacy keys to avoid conflicts
+        config.pop('input_shape', None)
+        config.pop('batch_input_shape', None)
+        return original_input_from_config(config)
+
+    # Apply overrides in a custom object scope
+    custom_objects = {
+        'Dense': layers.Dense,
+        'InputLayer': layers.InputLayer
+    }
+    # We monkeypatch the from_config for the duration of the load
+    old_dense_fc = layers.Dense.from_config
+    old_input_fc = layers.InputLayer.from_config
+    layers.Dense.from_config = dense_from_config
+    layers.InputLayer.from_config = input_from_config
+    
+    try:
+        model = keras.models.load_model(path)
+        return model
+    finally:
+        layers.Dense.from_config = old_dense_fc
+        layers.InputLayer.from_config = old_input_fc
+
 # ── Load Models ───────────────────────────────────────────────
 print('[EmotionAI] Loading models...')
+MODEL_ERROR = None
 try:
-    audio_model = keras.models.load_model('models/audio_emotion_model.h5')
-    video_model = keras.models.load_model('models/video_emotion_model.h5')
-    base_cnn    = keras.applications.MobileNetV2(weights='imagenet', include_top=False, input_shape=(112, 112, 3))
+    audio_model = robust_load_model('models/audio_emotion_model.h5')
+    video_model = robust_load_model('models/video_emotion_model.h5')
+    
+    # MobileNetV2 is standard, load normally
+    base_cnn = keras.applications.MobileNetV2(weights='imagenet', include_top=False, input_shape=(112, 112, 3))
     base_cnn.trainable = False
     feature_extractor = keras.Sequential([base_cnn, keras.layers.GlobalAveragePooling2D()])
-    fusion_model = keras.models.load_model('models/fusion_emotion.h5')
+    
+    fusion_model = robust_load_model('models/fusion_emotion.h5')
     MODELS_OK = True
     print('[EmotionAI] Models loaded ✓')
 except Exception as e:
+    import traceback
+    traceback.print_exc()
     print(f'[EmotionAI] Model load error: {e}')
+    MODEL_ERROR = str(e)
     audio_model = video_model = feature_extractor = fusion_model = None
     MODELS_OK = False
 
@@ -228,9 +280,18 @@ def call_groq(prompt, api_key=None):
 # Flask Endpoints
 # ─────────────────────────────────────────────────────────────
 
-@flask_app.get('/health')
+import tensorflow as tf
+
+@flask_app.route('/health', methods=['GET'])
 def health():
-    return jsonify({'status': 'ok', 'models': MODELS_OK, 'timestamp': datetime.now().isoformat()})
+    return jsonify({
+        "status": "ok",
+        "models": MODELS_OK,
+        "model_error": str(MODEL_ERROR) if not MODELS_OK else None,
+        "tf_version": tf.__version__,
+        "keras_version": keras.__version__,
+        "timestamp": datetime.now().isoformat()
+    })
 
 @flask_app.post('/process')
 def process():
@@ -470,16 +531,19 @@ if __name__ == '__main__':
     # Mount Flask onto Gradio's FastAPI app using WSGI middleware
     demo = build_gradio()
 
-    # Attach all Flask routes to Gradio's underlying FastAPI app
-    from gradio.routes import App as GrApp
+    # Mount the entire Flask app under the /api prefix
+    # This ensures that ALL flask routes match /api/* (e.g. /api/history, /api/process)
     from starlette.middleware.wsgi import WSGIMiddleware
+    demo.app.mount("/api", WSGIMiddleware(flask_app))
 
-    # Add Flask as a sub-app under /api/* path, and also handle the root API routes
-    demo.app.mount('/process',          WSGIMiddleware(flask_app))
-    demo.app.mount('/history',          WSGIMiddleware(flask_app))
-    demo.app.mount('/mappings',         WSGIMiddleware(flask_app))
-    demo.app.mount('/analyze_history',  WSGIMiddleware(flask_app))
-    demo.app.mount('/chat',             WSGIMiddleware(flask_app))
-    demo.app.mount('/health',           WSGIMiddleware(flask_app))
+    # Also keep a dedicated health check at the root /health if needed, 
+    # but the /api/health will be the primary one for Electron.
+    demo.app.mount("/health", WSGIMiddleware(flask_app))
 
-    demo.launch(server_name='0.0.0.0', server_port=7860, show_error=True)
+    # Launch with explicit network config for HF Spaces
+    demo.launch(
+        server_name='0.0.0.0',
+        server_port=7860,
+        share=False,
+        show_error=True
+    )

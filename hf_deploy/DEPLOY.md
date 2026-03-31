@@ -1,6 +1,6 @@
 # 🚀 Deploy EmotionAI Backend to Hugging Face Spaces
 
-Follow these steps exactly. Takes ~10 minutes.
+Follow these steps exactly. Takes ~5 minutes.
 
 ---
 
@@ -8,12 +8,6 @@ Follow these steps exactly. Takes ~10 minutes.
 
 - [Hugging Face account](https://huggingface.co/join) (free)
 - [Git](https://git-scm.com/downloads) installed
-- [Git LFS](https://git-lfs.com/) installed (for model files)
-
-Install Git LFS once:
-```bash
-git lfs install
-```
 
 ---
 
@@ -55,7 +49,6 @@ app.py
 Dockerfile
 requirements.txt
 README.md
-.gitattributes
 models/
   audio_emotion_model.h5
   video_emotion_model.h5
@@ -65,19 +58,7 @@ models/
 
 ---
 
-## Step 4 — Track model files with Git LFS
-
-Inside the `emotionai-backend/` folder:
-
-```bash
-git lfs track "*.h5"
-git lfs track "*.xml"
-git add .gitattributes
-```
-
----
-
-## Step 5 — Set your GROQ API Key (Secret)
+## Step 4 — Set your GROQ API Key (Secret)
 
 > ⚠️ Do NOT put API keys in code or git. Use HF Secrets instead.
 
@@ -89,7 +70,7 @@ git add .gitattributes
 
 ---
 
-## Step 6 — Push to deploy
+## Step 5 — Push to deploy
 
 ```bash
 git add .
@@ -98,11 +79,11 @@ git push
 ```
 
 HF will build the Docker image automatically. Watch the build log in the **Logs** tab of your Space.  
-First build takes **5-10 minutes** (installing TensorFlow).
+First build takes **~5 minutes**.
 
 ---
 
-## Step 7 — Get your Space URL
+## Step 6 — Get your Space URL
 
 Once the build is green, your API is live at:
 ```
@@ -121,7 +102,7 @@ You should see:
 
 ---
 
-## Step 8 — Update the Electron App
+## Step 7 — Update the Electron App
 
 Open `frontend/main.cjs` and replace line with `HF_SPACE_URL`:
 
@@ -148,10 +129,8 @@ Your final installer will be in `frontend/release/` — share the `.exe` file!
 
 | Problem | Fix |
 |---|---|
-| Build fails with OOM | HF free tier has 16 GB RAM — should be enough. If still fails, check logs for which package failed |
 | `/health` returns 503 | Models not loaded yet, wait 30s after first start |
 | `groq` errors | Check GROQ_API_KEY is set in Space Secrets |
-| Port not found | Make sure Dockerfile has `EXPOSE 7860` and `CMD ["python", "app.py"]` |
 
 ---
 
@@ -159,6 +138,6 @@ Your final installer will be in `frontend/release/` — share the `.exe` file!
 
 When you share the Electron `.exe`:
 - They double-click it — app opens
-- App connects automatically to `https://YOUR-USERNAME-emotionai-backend.hf.space`
+- App connects automatically to your HF Space
 - No Python, no Flask, no setup needed on their machine
-- Final `.exe` size: **~150 MB** (vs 2.5 GB with PyInstaller)
+- Final `.exe` size: **~150 MB**

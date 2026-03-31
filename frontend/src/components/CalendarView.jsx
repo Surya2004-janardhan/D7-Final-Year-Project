@@ -92,7 +92,7 @@ export default function CalendarView({ groqApiKey = '' }) {
           count: Array.isArray(data) ? data.length : 0,
         });
       } else {
-        const { data } = await axios.get("/history?limit=500");
+        const { data } = await axios.get("history?limit=500");
         setHistory(Array.isArray(data) ? data : []);
         logInfo("history", "load complete via api", {
           count: Array.isArray(data) ? data.length : 0,

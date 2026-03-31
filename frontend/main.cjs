@@ -91,15 +91,15 @@ function saveSettings(data) {
 
 // ─── Backend URL Config ──────────────────────────────────────
 // ⬇  Replace this with your actual HF Space URL after deploying
-const HF_SPACE_URL   = process.env.HF_SPACE_URL || 'https://YOUR-USERNAME-emotionai-backend.hf.space';
+const HF_SPACE_URL = process.env.HF_SPACE_URL || 'https://sureal01-emotionai-backend.hf.space/api';
 const LOCAL_BACKEND  = 'http://127.0.0.1:5000';
 const BACKEND_CWD    = path.join(__dirname, '..');
 const ROOT_CWD       = BACKEND_CWD;
 
 function getBackendUrl() {
-  // In packaged production app → use HF Space
-  // In dev → use local Flask
-  return app.isPackaged ? HF_SPACE_URL : LOCAL_BACKEND;
+  // Switched back to Local Backend as requested.
+  const useCloud = false; 
+  return useCloud ? HF_SPACE_URL : LOCAL_BACKEND;
 }
 
 function isBackendListening(port = 5000, host = "127.0.0.1", timeoutMs = 600) {
@@ -154,12 +154,6 @@ function resolveBackendCommand() {
 }
 
 async function startBackend() {
-  if (app.isPackaged) {
-    mainLog("backend", "packaged production: skipping local backend spawn");
-    pythonReady = true;
-    return Promise.resolve();
-  }
-
   if (pythonProcess && !pythonProcess.killed) {
     mainLog("backend", "already running");
     return Promise.resolve();

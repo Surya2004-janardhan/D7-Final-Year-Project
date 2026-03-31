@@ -171,7 +171,7 @@ export default function useDaemon({ settings, onNewResult, onShiftDetected }) {
     } catch (e) {
       // ignore
     }
-    const res = await axios.post("/process", formData, {
+    const res = await axios.post("process", formData, {
       headers: { "Content-Type": "multipart/form-data" },
     });
     logInfo("daemon", "background analysis request end", {

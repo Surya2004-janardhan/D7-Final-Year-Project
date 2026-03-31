@@ -25,11 +25,16 @@ import {
   BellRing,
 } from "lucide-react";
 
+import axios from "axios";
+
 const ipc =
   typeof window !== "undefined" && window.require
     ? window.require("electron").ipcRenderer
     : null;
-const BACKEND_BASE_URL = "http://127.0.0.1:5000";
+
+// Default to local, will be updated by IPC in App component
+let BACKEND_BASE_URL = "http://127.0.0.1:5000";
+axios.defaults.baseURL = BACKEND_BASE_URL;
 
 function hasUsableMusicPath(musicPath) {
   return typeof musicPath === "string" && /[\\/]/.test(musicPath);
@@ -52,6 +57,25 @@ export default function App() {
   const { settings, loaded, save } = useSettings();
 
   const [currentTab, setCurrentTab] = useState("dashboard");
+  const [backendReady, setBackendReady] = useState(false);
+
+  // Sync Backend URL from Main Process (Cloud or Local)
+  useEffect(() => {
+    if (ipc) {
+      ipc.invoke("get-backend-url").then((url) => {
+        if (url) {
+          // Normalize URL with trailing slash for correct relative path joining in axios
+          const normalizedUrl = url.endsWith("/") ? url : `${url}/`;
+          axios.defaults.baseURL = normalizedUrl;
+          BACKEND_BASE_URL = normalizedUrl;
+          setBackendReady(true);
+          logInfo("app", "backend url configured", { url: normalizedUrl });
+        }
+      });
+    } else {
+      setBackendReady(true); // Web fallback
+    }
+  }, []);
   const [lastDaemonResult, setLastDaemonResult] = useState(null);
   const [musicNowPlaying, setMusicNowPlaying] = useState(null);
   const [pausedForMusic, setPausedForMusic] = useState(false);
@@ -150,10 +174,10 @@ export default function App() {
     });
 
   useEffect(() => {
-    if (!loaded) return;
+    if (!loaded || !backendReady) return;
     if (settings.autoMode && !isDaemonActive) startDaemon();
     if (!settings.autoMode && isDaemonActive) stopDaemon();
-  }, [loaded, settings.autoMode]); // eslint-disable-line
+  }, [loaded, backendReady, settings.autoMode]); // eslint-disable-line
 
   useEffect(() => {
     const audio = audioRef.current;
